@@ -66,6 +66,15 @@ export function GlowDots({
       glow: glowColor ?? CONFIG.glow,
     };
 
+    // Resolve "currentColor" against the wrapper's computed color so the
+    // canvas (which can't parse CSS keywords) inherits the theme color.
+    const resolveColor = (c: string) => {
+      if (c.toLowerCase() !== "currentcolor") return c;
+      return getComputedStyle(wrap).color || "#ffffff";
+    };
+    cfg.dot = resolveColor(cfg.dot);
+    cfg.glow = resolveColor(cfg.glow);
+
     let dots: Dot[] = [];
     const pointer = { x: -9999, y: -9999, active: false };
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
