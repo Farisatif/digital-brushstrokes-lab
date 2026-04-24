@@ -261,7 +261,11 @@
     box-shadow: var(--shadow-soft);
   }
   .marquee {
-    animation: marquee 40s linear infinite;
+    /* Long duration so the wrap-around is imperceptible even on wide
+       screens. Track is repeated 6× in JSX; -50% loop = 3 copies → 3 copies,
+       perfectly seamless. */
+    animation: marquee 90s linear infinite;
+    will-change: transform;
   }
   .marquee-rtl {
     animation-direction: reverse;
