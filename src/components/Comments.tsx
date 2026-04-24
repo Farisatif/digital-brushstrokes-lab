@@ -306,7 +306,7 @@ export function Comments() {
             <div
               key={c.id}
               data-cid={c.id}
-              className="comment-card-enter group rounded-3xl bg-card border border-border p-6 sm:p-7 transition-all hover:-translate-y-0.5 hover:soft-shadow hover:border-foreground/20"
+              className="skeleton-content-in comment-card-enter group rounded-3xl bg-card border border-border p-6 sm:p-7 transition-all hover:-translate-y-0.5 hover:soft-shadow hover:border-foreground/20"
             >
               <div className="flex items-start gap-4">
                 <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-[oklch(0.55_0.22_255)] to-[oklch(0.78_0.12_270)] text-white flex items-center justify-center font-display text-lg shrink-0">
