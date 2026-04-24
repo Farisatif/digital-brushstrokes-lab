@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { listAllComments, deleteComment, setCommentStatus } from "@/utils/settings.functions";
-import { Loader2, Trash2, Check, X, RefreshCw, Clock } from "lucide-react";
+import { Trash2, Check, X, RefreshCw, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Status = "pending" | "approved" | "rejected";
 type Row = { id: string; author_name: string; message: string; created_at: string; status: Status };
@@ -121,8 +122,32 @@ export function CommentsAdmin({ password }: { password: string }) {
 
       {/* List */}
       {loading ? (
-        <div className="py-12 flex justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <div className="space-y-2.5" aria-label="Loading comments">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="rounded-2xl border border-border bg-card p-4"
+              style={{ opacity: 1 - i * 0.2 }}
+            >
+              <div className="flex items-start gap-3">
+                <Skeleton className="h-9 w-9 rounded-xl shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <Skeleton className="h-3 w-24 rounded-full" />
+                    <Skeleton className="h-2.5 w-20 rounded-full" />
+                  </div>
+                  <div className="mt-2 space-y-1.5">
+                    <Skeleton className="h-2.5 w-[88%] rounded-full" />
+                    <Skeleton className="h-2.5 w-[62%] rounded-full" />
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Skeleton className="h-6 w-20 rounded-full" />
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       ) : !filtered.length ? (
         <div className="py-12 text-center text-sm text-muted-foreground rounded-2xl border border-dashed border-border">
