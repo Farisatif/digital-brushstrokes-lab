@@ -1,4 +1,5 @@
 import { Reveal } from "./Reveal";
+import { GlowDots } from "./GlowDots";
 import {
   Award,
   Code2,
@@ -45,16 +46,18 @@ export function AchievementsSection() {
 
   return (
     <section className="relative py-28 sm:py-36 overflow-hidden">
-      {/* Decorative full-bleed pattern — chevrons + dots, very faint. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.06]"
-        style={{
-          backgroundImage:
-            "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='72' height='72' viewBox='0 0 72 72'><g fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><polyline points='16,26 26,36 16,46' transform='rotate(15 21 36)'/><polyline points='46,26 56,36 46,46' transform='rotate(-25 51 36)'/><circle cx='36' cy='14' r='1.2' fill='currentColor' stroke='none'/><circle cx='12' cy='12' r='1' fill='currentColor' stroke='none'/><circle cx='60' cy='60' r='1' fill='currentColor' stroke='none'/></g></svg>\")",
-          backgroundSize: "72px 72px",
-        }}
-      />
+      {/* Interactive glowing-dots field — full-bleed, reacts to cursor / touch.
+          Uses currentColor so dots/glow inherit the inverted band color
+          (white in light mode, black in dark mode). */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <GlowDots
+          asBackground
+          height="100%"
+          dotColor="currentColor"
+          glowColor="currentColor"
+          spacing={38}
+        />
+      </div>
       {/* Soft radial glow centered on the title for depth. */}
       <div
         aria-hidden
