@@ -412,6 +412,36 @@
     .animate-blob, .marquee, .pulse-ring, .animate-float-slow { animation: none !important; }
   }
 
+  /* ---------- Skeleton loading: shimmer + graceful fade ---------- */
+  @keyframes skeleton-shimmer {
+    0%   { background-position: -150% 0; }
+    100% { background-position: 150% 0; }
+  }
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: color-mix(in oklab, var(--foreground) 8%, transparent);
+    background-image: linear-gradient(
+      100deg,
+      transparent 35%,
+      color-mix(in oklab, var(--foreground) 6%, transparent) 50%,
+      transparent 65%
+    );
+    background-size: 220% 100%;
+    background-repeat: no-repeat;
+    animation: skeleton-shimmer 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    will-change: background-position;
+  }
+  .skeleton-fade-out {
+    animation: fade-in 0.4s ease-out reverse forwards;
+  }
+  .skeleton-content-in {
+    animation: fade-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton { animation: none !important; }
+  }
+
   /* ---------- First-load boot cascade ---------- */
   .chevron-canvas {
     opacity: 1;
