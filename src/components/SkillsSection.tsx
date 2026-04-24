@@ -1,14 +1,13 @@
-import { useEffect, useRef, useState } from "react";
-import { RotateCcw, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Sparkles } from "lucide-react";
 import { Reveal } from "./Reveal";
-import { PhysicsPills, type PhysicsPillsHandle } from "./PhysicsPills";
+import { PhysicsPills } from "./PhysicsPills";
 import { useSiteData } from "./SiteDataProvider";
 import { useLang } from "./LanguageProvider";
 
 export function SkillsSection() {
   const { data } = useSiteData();
   const { t } = useLang();
-  const pillsRef = useRef<PhysicsPillsHandle>(null);
 
   const pills = (data.skills as Array<{ name: string; level?: number }>).map((s, i) => ({
     label: s.name,
@@ -76,16 +75,7 @@ export function SkillsSection() {
           floor as the next section starts). */}
       <Reveal delay={0.15}>
         <div className="relative w-full mt-0">
-          <button
-            type="button"
-            onClick={() => pillsRef.current?.replay()}
-            className="absolute top-3 right-4 sm:right-8 z-10 inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 backdrop-blur px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-background transition"
-            aria-label={t("Replay", "إعادة")}
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            {t("Replay", "إعادة")}
-          </button>
-          <PhysicsPills ref={pillsRef} pills={pills} height={height} />
+          <PhysicsPills pills={pills} height={height} />
         </div>
       </Reveal>
     </section>
