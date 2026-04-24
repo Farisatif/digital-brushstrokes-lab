@@ -171,14 +171,35 @@ export const listAllComments = createServerFn({ method: "POST" })
   })
   .handler(async ({ data }) => {
     const auth = await checkPassword(data.password);
-    if (!auth.ok) return { ...auth, comments: [] as Array<{ id: string; author_name: string; message: string; created_at: string }> };
+    if (!auth.ok) return { ...auth, comments: [] as Array<{ id: string; author_name: string; message: string; created_at: string; status: string }> };
     const { data: rows, error } = await supabaseAdmin
       .from("comments")
-      .select("id, author_name, message, created_at")
+      .select("id, author_name, message, created_at, status")
       .order("created_at", { ascending: false })
       .limit(500);
     if (error) throw new Error(error.message);
-    return { ok: true as const, comments: rows || [] };
+    return { ok: true as const, comments: (rows || []) as Array<{ id: string; author_name: string; message: string; created_at: string; status: string }> };
+  });
+
+// Approve or reject a comment.
+export const setCommentStatus = createServerFn({ method: "POST" })
+  .inputValidator((input: { password: string; id: string; status: "approved" | "rejected" | "pending" }) => {
+    if (!input || typeof input.password !== "string" || typeof input.id !== "string") {
+      throw new Error("Invalid input");
+    }
+    if (!["approved", "rejected", "pending"].includes(input.status)) throw new Error("Invalid status");
+    if (input.password.length > 200 || input.id.length > 64) throw new Error("Invalid input");
+    return input;
+  })
+  .handler(async ({ data }) => {
+    const auth = await checkPassword(data.password);
+    if (!auth.ok) return auth;
+    const { error } = await supabaseAdmin
+      .from("comments")
+      .update({ status: data.status })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
   });
 
 // Reset password using a one-time recovery code. On success, returns a freshly
