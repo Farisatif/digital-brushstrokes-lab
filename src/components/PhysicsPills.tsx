@@ -102,7 +102,7 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
   // requires a permission request AND (b) we haven't been granted yet.
   const [needsMotionPermission, setNeedsMotionPermission] = useState(false);
   const [motionDenied, setMotionDenied] = useState(false);
-  const sensorAttachRef = useRef<(() => void) | null>(null);
+  const requestMotionRef = useRef<(() => Promise<void>) | null>(null);
 
   const pillData = useMemo(
     () =>
