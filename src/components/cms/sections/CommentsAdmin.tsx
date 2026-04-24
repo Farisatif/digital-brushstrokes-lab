@@ -4,7 +4,7 @@ import { listAllComments, deleteComment, setCommentStatus } from "@/utils/settin
 import { Trash2, Check, X, RefreshCw, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton, DotPulse } from "@/components/ui/skeleton";
 
 type Status = "pending" | "approved" | "rejected";
 type Row = { id: string; author_name: string; message: string; created_at: string; status: Status };
