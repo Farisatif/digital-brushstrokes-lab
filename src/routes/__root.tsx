@@ -45,8 +45,8 @@ export const Route = createRootRoute({
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "cv_fares" },
       { name: "twitter:description", content: "Dynamic CV Studio is an interactive, customizable resume builder with physics-based animations." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/eb27ffa5-f67d-4e40-bc9c-a57c49abef3f/id-preview-b306cd15--5f443e77-dcf0-4210-92f3-9a49d11c0893.lovable.app-1776942699428.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/eb27ffa5-f67d-4e40-bc9c-a57c49abef3f/id-preview-b306cd15--5f443e77-dcf0-4210-92f3-9a49d11c0893.lovable.app-1776942699428.png" },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/dc3988b1-056f-4fc7-ae06-e8536262535c" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/dc3988b1-056f-4fc7-ae06-e8536262535c" },
     ],
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
