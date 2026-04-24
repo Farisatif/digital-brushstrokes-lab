@@ -8,6 +8,7 @@ import type { Database } from './types';
 function createSupabaseAdminClient() {
   const SUPABASE_URL =
     process.env.SUPABASE_URL ||
+    import.meta.env.VITE_SUPABASE_URL ||
     process.env.VITE_SUPABASE_URL;
   // The platform reserves the SUPABASE_ prefix for managed integrations, so
   // when this project is connected to an external Supabase the service role
