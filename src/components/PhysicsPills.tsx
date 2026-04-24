@@ -118,7 +118,9 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     reducedMotionRef.current = mql.matches;
 
     const engine = Matter.Engine.create({
-      gravity: { x: 0, y: reducedMotionRef.current ? 0 : 1, scale: 0.0011 },
+      // Stronger downward gravity — pills should fall in a straight line,
+      // not drift sideways. scale bumped from 0.0011 → 0.0014.
+      gravity: { x: 0, y: reducedMotionRef.current ? 0 : 1, scale: 0.0014 },
       positionIterations: 10,
       velocityIterations: 8,
       constraintIterations: 3,
@@ -603,18 +605,16 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
 
         // ---- Channel 1: pseudo-force on every body (inertial reaction) ----
         // Container moves DOWN (page scrolls down → window.scrollY +) →
-        // bodies feel a force UP relative to the container. We render the
-        // pills inside a container that itself does NOT move, so we apply
-        // the inertial reaction directly: opposite of container accel.
-        // Coefficient is now ~6× the previous value so it is clearly felt.
-        const inertiaForce = -smoothedVy * 0.0055;
-        const clampedForce = Math.max(-0.022, Math.min(0.022, inertiaForce));
+        // bodies feel a force UP relative to the container. Coefficient
+        // bumped 3× more (now ~18× original) so the scroll is clearly felt.
+        const inertiaForce = -smoothedVy * 0.018;
+        const clampedForce = Math.max(-0.06, Math.min(0.06, inertiaForce));
 
         // ---- Channel 2: temporary gravity bias from scroll acceleration ----
         // Quick flicks tilt the gravity vector, then it eases back to base.
         scrollGravityBias = Math.max(
-          -0.9,
-          Math.min(0.9, scrollGravityBias * 0.55 + accel * -180),
+          -1.5,
+          Math.min(1.5, scrollGravityBias * 0.55 + accel * -420),
         );
         engine.gravity.y = baseGravityYInitial + scrollGravityBias;
 
@@ -655,25 +655,13 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     };
     Matter.Events.on(engine, "beforeUpdate", onBeforeUpdate);
 
-    // Device motion / orientation tilt — pills react to phone tilt. Subtle
-    // gravity bias on coarse pointers (touch devices) so the field feels
-    // physically alive when the user moves the device. Combined with the
-    // scroll-induced bias above so both inputs read together.
-    const onOrient = (e: DeviceOrientationEvent) => {
-      if (!visibleRef.current || reducedMotionRef.current) return;
-      // gamma: left/right tilt (-90..90), beta: front/back (-180..180)
-      const gx = (e.gamma ?? 0) / 45; // normalize ~[-2..2]
-      const gy = (e.beta ?? 0) / 90; // normalize ~[-2..2]
-      engine.gravity.x = Math.max(-1.2, Math.min(1.2, gx)) * 0.6;
-      const tiltBias = Math.max(-0.5, Math.min(0.5, gy - 0.5)) * 0.4;
-      // Note: beforeUpdate already writes scrollGravityBias every tick,
-      // so we just add the tilt component on top of the base+scroll value.
-      engine.gravity.y = baseGravityYInitial + scrollGravityBias + tiltBias;
-    };
+    // Device tilt is intentionally NOT wired to gravity anymore.
+    // Holding a phone naturally produces a constant ~5–15° gamma tilt that
+    // would dominate gravity.x and push the pills toward one side, hiding
+    // the scroll-driven physics. Pills should fall straight down to the
+    // floor; only scroll and direct interaction (drag) move them sideways.
     const isCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
-    if (isCoarsePointer && typeof window.DeviceOrientationEvent !== "undefined") {
-      window.addEventListener("deviceorientation", onOrient, { passive: true });
-    }
+    const onOrient: ((e: DeviceOrientationEvent) => void) | null = null;
 
     try {
       if (!sessionStorage.getItem("pp:hint:v1")) {
@@ -690,7 +678,9 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       clearSpawnTimers();
       window.removeEventListener("scroll", onScroll);
-      if (isCoarsePointer) window.removeEventListener("deviceorientation", onOrient);
+      // (deviceorientation listener was removed — pills no longer follow tilt)
+      void isCoarsePointer;
+      void onOrient;
       Matter.Events.off(engine, "beforeUpdate", onBeforeUpdate);
       canvas.removeEventListener("pointerdown", onPointerDown);
       canvas.removeEventListener("pointermove", onPointerMove);
