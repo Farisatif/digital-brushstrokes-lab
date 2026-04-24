@@ -1,509 +1,684 @@
-import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Matter from "matter-js";
 
-/**
- * PhysicsPills — KitSys-faithful falling pills field.
- *
- * Design contract:
- *  - Pills fall in only when the section enters the viewport.
- *  - Page scroll is NEVER blocked. The canvas only captures pointer events
- *    that land directly on a pill (or within a small forgiving radius).
- *  - Drag is mouse-only on desktop and pointer-only on touch — no custom
- *    scroll arbitration, no preventDefault on touchmove unless a pill is
- *    actively being held.
- *  - When released, pills get a natural fling proportional to recent pointer
- *    velocity, capped sensibly so they never fly off-screen.
- *  - Top wall + cleanup sweep guarantee no pill can disappear permanently.
- */
+export type PhysicsPillsHandle = { replay: () => void };
 
-interface PillData {
+export type PhysicsPill = {
   label: string;
   variant: number;
-}
+  level?: number;
+};
 
-interface Props {
-  pills: PillData[];
+type Props = {
+  pills: PhysicsPill[];
   height?: number;
-  className?: string;
-}
+};
 
-export interface PhysicsPillsHandle {
-  replay: () => void;
-}
-
-/**
- * Theme-aware palette: pastels + brand accents that work on both light &
- * dark backgrounds without hardcoding to a section color.
- */
-const PALETTE: { bg: string; fg: string }[] = [
-  { bg: "#F1F5F9", fg: "#0F172A" }, // porcelain
-  { bg: "#1E293B", fg: "#F8FAFC" }, // slate-800
-  { bg: "#DBE3F1", fg: "#1E2A4A" }, // soft blue tint
-  { bg: "#0F172A", fg: "#F8FAFC" }, // near-black
-  { bg: "#FCE7C8", fg: "#3B2A14" }, // warm peach
-  { bg: "#4338CA", fg: "#FFFFFF" }, // indigo accent
-  { bg: "#FAFAF9", fg: "#27272A" }, // off-white
-  { bg: "#475569", fg: "#F8FAFC" }, // slate-600
-  { bg: "#C7D2FE", fg: "#1E2A6B" }, // periwinkle
-  { bg: "#1D4ED8", fg: "#FFFFFF" }, // brand blue
-  { bg: "#E7E5E4", fg: "#1C1917" }, // stone
-  { bg: "#A7F3D0", fg: "#064E3B" }, // mint
+// Kitsys-style 12-variant palette (background / foreground)
+const PALETTE: Array<{ bg: string; fg: string; bgTop: string; bgBottom: string }> = [
+  { bg: "#0F1B4C", fg: "#FFFFFF", bgTop: "#1A2A66", bgBottom: "#08123A" },
+  { bg: "#2747D8", fg: "#FFFFFF", bgTop: "#4664EE", bgBottom: "#1A35B8" },
+  { bg: "#C9DAF8", fg: "#0B2A4A", bgTop: "#E0EBFC", bgBottom: "#A9C2EF" },
+  { bg: "#1E3A8A", fg: "#FFFFFF", bgTop: "#2E50AC", bgBottom: "#142868" },
+  { bg: "#B7B9F2", fg: "#1E2A6B", bgTop: "#CFD0F8", bgBottom: "#9B9DE5" },
+  { bg: "#0F172A", fg: "#FFFFFF", bgTop: "#1E2942", bgBottom: "#070C1A" },
+  { bg: "#DCE7FA", fg: "#0B2A4A", bgTop: "#EEF4FE", bgBottom: "#BFD2F2" },
+  { bg: "#3B5BDB", fg: "#FFFFFF", bgTop: "#5878EE", bgBottom: "#2944B8" },
+  { bg: "#1E40AF", fg: "#FFFFFF", bgTop: "#3056C8", bgBottom: "#142E88" },
+  { bg: "#93C5FD", fg: "#0B2A4A", bgTop: "#B4D7FE", bgBottom: "#6FAEF6" },
+  { bg: "#BFD7F2", fg: "#0B2A4A", bgTop: "#D6E5F8", bgBottom: "#9CBFE5" },
+  { bg: "#1F2937", fg: "#FFFFFF", bgTop: "#324153", bgBottom: "#111722" },
 ];
 
+type DragState =
+  | { kind: "idle" }
+  | {
+      kind: "pending-drag";
+      pointerId: number;
+      body: Matter.Body;
+      localOffset: { x: number; y: number };
+      startClient: { x: number; y: number };
+      startWorld: { x: number; y: number };
+    }
+  | {
+      kind: "dragging";
+      pointerId: number;
+      body: Matter.Body;
+      constraint: Matter.Constraint;
+      localOffset: { x: number; y: number };
+      samples: Array<{ t: number; x: number; y: number }>;
+    };
+
+type ExtBody = Matter.Body & {
+  __label: string;
+  __level?: number;
+  __palette: (typeof PALETTE)[number];
+  __w: number;
+  __h: number;
+  __spawnAt: number;
+  __flashUntil?: number;
+};
+
+const WALL_T = 80;
+
 export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function PhysicsPills(
-  { pills, height = 720, className = "" },
+  { pills, height = 720 },
   ref,
 ) {
-  const sceneRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const tagRef = useRef<HTMLDivElement>(null);
+  const tagBarRef = useRef<HTMLDivElement>(null);
+
   const engineRef = useRef<Matter.Engine | null>(null);
-  const bodiesRef = useRef<Matter.Body[]>([]);
-  const worldRef = useRef<Matter.World | null>(null);
+  const runnerRef = useRef<Matter.Runner | null>(null);
+  const wallsRef = useRef<Matter.Body[]>([]);
+  const bodiesRef = useRef<ExtBody[]>([]);
+  const dragRef = useRef<DragState>({ kind: "idle" });
+  const visibleRef = useRef(true);
+  const rafRef = useRef<number | null>(null);
+  const sizeRef = useRef({ w: 0, h: height });
   const spawnTimersRef = useRef<number[]>([]);
-  const spawnFnRef = useRef<(() => void) | null>(null);
-  const [started, setStarted] = useState(false);
+  const reducedMotionRef = useRef(false);
+  const hoveredRef = useRef<ExtBody | null>(null);
+  const tagLockedRef = useRef<ExtBody | null>(null);
+  const tagAutoHideRef = useRef<number | null>(null);
+  const holdTimerRef = useRef<number | null>(null);
+  const spawnAllRef = useRef<() => void>(() => {});
+
+  const [showHint, setShowHint] = useState(false);
+
+  const pillData = useMemo(
+    () =>
+      pills.map((p) => ({
+        ...p,
+        palette: PALETTE[p.variant % PALETTE.length] ?? PALETTE[0],
+      })),
+    [pills],
+  );
 
   useImperativeHandle(ref, () => ({
-    replay: () => spawnFnRef.current?.(),
+    replay: () => spawnAllRef.current(),
   }));
 
-  // Defer simulation start until the section is on/near the screen.
   useEffect(() => {
-    if (!sceneRef.current) return;
-    const el = sceneRef.current;
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            setStarted(true);
-            io.disconnect();
-            break;
-          }
-        }
-      },
-      { rootMargin: "-5% 0px" },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!started || !sceneRef.current || !canvasRef.current) return;
-    const container = sceneRef.current;
+    const wrap = wrapRef.current;
     const canvas = canvasRef.current;
-    const width = container.clientWidth;
-    const h = height;
+    if (!wrap || !canvas) return;
 
-    const { Engine, Bodies, Composite, Body, Events, Query } = Matter;
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    reducedMotionRef.current = mql.matches;
 
-    // ---------------- Engine ----------------
-    const engine = Engine.create({
-      gravity: { x: 0, y: 1, scale: 0.0016 },
-      positionIterations: 12,
-      velocityIterations: 10,
+    const engine = Matter.Engine.create({
+      gravity: { x: 0, y: reducedMotionRef.current ? 0 : 1, scale: 0.0011 },
+      positionIterations: 10,
+      velocityIterations: 8,
       constraintIterations: 3,
     });
     engineRef.current = engine;
-    worldRef.current = engine.world;
 
-    // ---------------- Walls ----------------
-    // Floor + sides at the visible edges. Top wall well above so falling pills
-    // can spawn off-screen but no body can ever exit upward after spawn.
-    const WALL_T = 80;
-    const wallOpts = {
-      isStatic: true,
-      friction: 0.05,
-      frictionStatic: 0.5,
-      restitution: 0.0,
-      slop: 0.04,
-      render: { visible: false },
+    const runner = Matter.Runner.create({ delta: 1000 / 60 });
+    runnerRef.current = runner;
+    Matter.Runner.run(runner, engine);
+
+    Matter.Events.on(engine, "collisionStart", (ev) => {
+      const now = performance.now();
+      for (const pair of ev.pairs) {
+        const va = pair.bodyA.velocity;
+        const vb = pair.bodyB.velocity;
+        const rel = Math.hypot(va.x - vb.x, va.y - vb.y);
+        if (rel > 6) {
+          (pair.bodyA as ExtBody).__flashUntil = now + 120;
+          (pair.bodyB as ExtBody).__flashUntil = now + 120;
+        }
+      }
+    });
+
+    const measurePill = (label: string) => {
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return { w: 120, h: 44 };
+      ctx.save();
+      ctx.font = "600 16px Inter, system-ui, sans-serif";
+      const w = Math.ceil(ctx.measureText(label).width) + 36;
+      ctx.restore();
+      return { w: Math.max(72, w), h: 44 };
     };
-    const floor = Bodies.rectangle(width / 2, h + WALL_T / 2, width * 4, WALL_T, wallOpts);
-    const leftWall = Bodies.rectangle(-WALL_T / 2, h / 2, WALL_T, h * 4, wallOpts);
-    const rightWall = Bodies.rectangle(width + WALL_T / 2, h / 2, WALL_T, h * 4, wallOpts);
-    // Top ceiling far above to allow spawn drop, but catches anything launched up.
-    const ceiling = Bodies.rectangle(width / 2, -800 - WALL_T / 2, width * 4, WALL_T, wallOpts);
-    Composite.add(engine.world, [floor, leftWall, rightWall, ceiling]);
 
-    // ---------------- Sizing ----------------
-    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    const isMobile = width < 640;
-    const FONT_SIZE = isMobile ? 16 : 19;
-    const PAD_X = isMobile ? 20 : 26;
-    const PILL_H = isMobile ? 42 : 50;
-    const MIN_W = 84;
-
-    canvas.width = Math.floor(width * dpr);
-    canvas.height = Math.floor(h * dpr);
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${h}px`;
-    const ctx = canvas.getContext("2d")!;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.font = `600 ${FONT_SIZE}px Inter, system-ui, sans-serif`;
-
-    const measured = pills.map((p) =>
-      Math.max(MIN_W, ctx.measureText(p.label).width + PAD_X * 2),
-    );
-
-    // ---------------- Body factory ----------------
-    const makePillBody = (i: number): Matter.Body => {
-      const p = pills[i];
-      const palette = PALETTE[(p.variant - 1 + PALETTE.length) % PALETTE.length];
-      const w = measured[i];
-      const margin = w / 2 + 12;
-      const usable = Math.max(1, width - margin * 2);
-      const phi = 0.61803398875;
-      const t = (i * phi) % 1;
-      const x = margin + t * usable + (Math.random() - 0.5) * 16;
-      // Stagger spawn Y above the canvas so cascade looks natural.
-      const y = -PILL_H - 50 - (i % 4) * 90 - Math.random() * 60;
-      const body = Bodies.rectangle(x, y, w, PILL_H, {
-        chamfer: { radius: PILL_H / 2 },
-        restitution: 0.04,
-        friction: 0.35,
-        frictionStatic: 0.7,
+    const createPillBody = (
+      label: string,
+      level: number | undefined,
+      palette: (typeof PALETTE)[number],
+      w: number,
+      h: number,
+      x: number,
+      y: number,
+      angle: number,
+    ): ExtBody => {
+      const body = Matter.Bodies.rectangle(x, y, w, h, {
+        chamfer: { radius: h / 2 },
+        restitution: 0.18,
+        friction: 0.22,
+        frictionStatic: 0.6,
         frictionAir: 0.012,
-        density: 0.002,
-        angle: (Math.random() - 0.5) * 0.4,
-        slop: 0.04,
-        render: { fillStyle: "transparent", strokeStyle: "transparent", lineWidth: 0 },
-      });
-      Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.04);
-      const meta = body as unknown as Record<string, unknown>;
-      meta.__label = p.label;
-      meta.__bg = palette.bg;
-      meta.__fg = palette.fg;
-      meta.__w = w;
-      meta.__h = PILL_H;
+        density: 0.0019,
+        slop: 0.03,
+        angle,
+      }) as ExtBody;
+      body.__label = label;
+      body.__level = level;
+      body.__palette = palette;
+      body.__w = w;
+      body.__h = h;
+      body.__spawnAt = performance.now();
       return body;
     };
 
-    // ---------------- Spawn cascade ----------------
-    const clearTimers = () => {
-      spawnTimersRef.current.forEach((id) => window.clearTimeout(id));
+    const clearSpawnTimers = () => {
+      for (const t of spawnTimersRef.current) clearTimeout(t);
       spawnTimersRef.current = [];
     };
 
     const spawnAll = () => {
-      clearTimers();
-      if (worldRef.current) {
-        bodiesRef.current.forEach((b) => Composite.remove(worldRef.current!, b));
-      }
+      const eng = engineRef.current;
+      if (!eng) return;
+      for (const b of bodiesRef.current) Matter.World.remove(eng.world, b);
       bodiesRef.current = [];
-      pills.forEach((_, i) => {
-        const delay = 180 + i * (90 + Math.random() * 50);
-        const id = window.setTimeout(() => {
-          if (!worldRef.current) return;
-          const body = makePillBody(i);
+      clearSpawnTimers();
+
+      const { w } = sizeRef.current;
+      if (w === 0) return;
+
+      if (reducedMotionRef.current) {
+        const cols = Math.max(2, Math.floor(w / 140));
+        const gap = 12;
+        pillData.forEach((p, i) => {
+          const dim = measurePill(p.label);
+          const cellW = w / cols;
+          const cx = (i % cols) * cellW + cellW / 2;
+          const cy = 60 + Math.floor(i / cols) * (dim.h + gap) + dim.h / 2;
+          const body = createPillBody(p.label, p.level, p.palette, dim.w, dim.h, cx, cy, 0);
+          Matter.World.add(eng.world, body);
           bodiesRef.current.push(body);
-          Composite.add(worldRef.current, body);
-        }, delay);
-        spawnTimersRef.current.push(id);
-      });
-    };
-
-    spawnFnRef.current = spawnAll;
-    spawnAll();
-
-    // Periodic safety sweep — resurrect any escaped body.
-    const cleanupId = window.setInterval(() => {
-      if (!worldRef.current) return;
-      for (const b of bodiesRef.current) {
-        const { x, y } = b.position;
-        // If a body has escaped (shouldn't happen with walls, but be safe),
-        // teleport it back to the top so the user never sees a missing pill.
-        if (y > h + 400 || y < -1500 || x < -300 || x > width + 300) {
-          Body.setPosition(b, { x: width / 2, y: -PILL_H });
-          Body.setVelocity(b, { x: 0, y: 0 });
-          Body.setAngularVelocity(b, 0);
-        }
-      }
-    }, 800);
-
-    // ---------------- Pointer drag (unified mouse + touch) ----------------
-    // We DO NOT use Matter's MouseConstraint. We implement a simple, explicit
-    // pointer drag that only activates when the pointer-down lands on a pill.
-    // For everything else (empty canvas area), pointer events are ignored
-    // entirely so the page scrolls and pans naturally.
-
-    let dragBody: Matter.Body | null = null;
-    let dragOffset = { x: 0, y: 0 }; // local point on body where the pointer grabbed
-    let pointerId: number | null = null;
-    let lastPos = { x: 0, y: 0, t: 0 };
-    let prevPos = { x: 0, y: 0, t: 0 };
-    let savedFrictionAir = 0.012;
-
-    const TOUCH_GRAB_RADIUS = 40;
-    const MAX_FLING_SPEED = 22; // px per frame after release
-
-    const getCanvasPoint = (clientX: number, clientY: number) => {
-      const rect = canvas.getBoundingClientRect();
-      return { x: clientX - rect.left, y: clientY - rect.top };
-    };
-
-    const findBodyNear = (pt: { x: number; y: number }, isTouch: boolean): Matter.Body | null => {
-      // Direct hit first.
-      const exact = Query.point(bodiesRef.current, pt)[0];
-      if (exact) return exact;
-      // Forgiving fallback (touch only — desktop click stays precise).
-      if (!isTouch) return null;
-      let best: Matter.Body | null = null;
-      let bestDist = TOUCH_GRAB_RADIUS * TOUCH_GRAB_RADIUS;
-      for (const b of bodiesRef.current) {
-        const dx = b.position.x - pt.x;
-        const dy = b.position.y - pt.y;
-        const d2 = dx * dx + dy * dy;
-        if (d2 < bestDist) {
-          bestDist = d2;
-          best = b;
-        }
-      }
-      return best;
-    };
-
-    const onPointerDown = (e: PointerEvent) => {
-      if (dragBody) return; // already dragging something
-      if (e.pointerType === "mouse" && e.button !== 0) return;
-      const pt = getCanvasPoint(e.clientX, e.clientY);
-      const isTouch = e.pointerType !== "mouse";
-      const hit = findBodyNear(pt, isTouch);
-      if (!hit) return; // tap on empty area — let the browser scroll
-
-      e.preventDefault();
-      dragBody = hit;
-      pointerId = e.pointerId;
-      try {
-        canvas.setPointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
-      }
-
-      // Compute local grab offset so the body rotates around the grab point.
-      const cos = Math.cos(-hit.angle);
-      const sin = Math.sin(-hit.angle);
-      const dx = pt.x - hit.position.x;
-      const dy = pt.y - hit.position.y;
-      dragOffset = {
-        x: dx * cos - dy * sin,
-        y: dx * sin + dy * cos,
-      };
-
-      savedFrictionAir = hit.frictionAir;
-      hit.frictionAir = 0.001;
-      const now = performance.now();
-      lastPos = { x: pt.x, y: pt.y, t: now };
-      prevPos = { ...lastPos };
-      canvas.style.cursor = "grabbing";
-    };
-
-    const onPointerMove = (e: PointerEvent) => {
-      if (!dragBody || e.pointerId !== pointerId) {
-        // If hovering on desktop without dragging, update cursor on hit.
-        if (!dragBody && e.pointerType === "mouse") {
-          const pt = getCanvasPoint(e.clientX, e.clientY);
-          const hit = Query.point(bodiesRef.current, pt)[0];
-          canvas.style.cursor = hit ? "grab" : "default";
-        }
+        });
         return;
       }
-      e.preventDefault();
-      const pt = getCanvasPoint(e.clientX, e.clientY);
-      const now = performance.now();
-      prevPos = lastPos;
-      lastPos = { x: pt.x, y: pt.y, t: now };
 
-      // Compute target world position so the original grab point follows the cursor.
-      const cos = Math.cos(dragBody.angle);
-      const sin = Math.sin(dragBody.angle);
-      const grabWorldX = dragOffset.x * cos - dragOffset.y * sin;
-      const grabWorldY = dragOffset.x * sin + dragOffset.y * cos;
-      const targetX = pt.x - grabWorldX;
-      const targetY = pt.y - grabWorldY;
+      const phi = 0.6180339887;
+      pillData.forEach((p, i) => {
+        const dim = measurePill(p.label);
+        const xFrac = ((i + 1) * phi) % 1;
+        const x = dim.w / 2 + 12 + xFrac * (w - dim.w - 24);
+        const y = -dim.h * (2 + (i % 6));
+        const angle = (Math.random() - 0.5) * 1.0;
+        const delay = i * (90 + Math.random() * 50);
+        const t = window.setTimeout(() => {
+          if (!engineRef.current) return;
+          const body = createPillBody(p.label, p.level, p.palette, dim.w, dim.h, x, y, angle);
+          Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.08);
+          Matter.Body.setVelocity(body, { x: (Math.random() - 0.5) * 2, y: 0 });
+          Matter.World.add(engineRef.current.world, body);
+          bodiesRef.current.push(body);
+        }, delay);
+        spawnTimersRef.current.push(t);
+      });
+    };
+    spawnAllRef.current = spawnAll;
 
-      // Move the body directly. This is more stable than a soft constraint.
-      Body.setPosition(dragBody, { x: targetX, y: targetY });
-      Body.setVelocity(dragBody, { x: 0, y: 0 });
-      Body.setAngularVelocity(dragBody, dragBody.angularVelocity * 0.6);
+    const buildWalls = (w: number, h: number) => {
+      for (const wallBody of wallsRef.current) Matter.World.remove(engine.world, wallBody);
+      const opts = {
+        isStatic: true,
+        friction: 0.4,
+        restitution: 0.1,
+        render: { visible: false },
+      };
+      const floor = Matter.Bodies.rectangle(w / 2, h + WALL_T / 2, w * 2, WALL_T, opts);
+      const ceil = Matter.Bodies.rectangle(
+        w / 2,
+        -WALL_T * 4 - WALL_T / 2,
+        w * 2,
+        WALL_T,
+        opts,
+      );
+      const left = Matter.Bodies.rectangle(-WALL_T / 2, h / 2, WALL_T, h * 4, opts);
+      const right = Matter.Bodies.rectangle(w + WALL_T / 2, h / 2, WALL_T, h * 4, opts);
+      wallsRef.current = [floor, ceil, left, right];
+      Matter.World.add(engine.world, wallsRef.current);
     };
 
-    const releaseDrag = () => {
-      if (!dragBody) return;
-      const body = dragBody;
-      body.frictionAir = savedFrictionAir;
-      // Compute fling velocity from the last two pointer samples.
-      const dt = Math.max(8, lastPos.t - prevPos.t);
-      let vx = ((lastPos.x - prevPos.x) / dt) * 16;
-      let vy = ((lastPos.y - prevPos.y) / dt) * 16;
-      const sp = Math.hypot(vx, vy);
-      if (sp > MAX_FLING_SPEED) {
-        const k = MAX_FLING_SPEED / sp;
-        vx *= k;
-        vy *= k;
-      }
-      Body.setVelocity(body, { x: vx * 0.9, y: vy * 0.9 });
-      Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.05);
-      dragBody = null;
-      pointerId = null;
-      canvas.style.cursor = "default";
+    const setSize = () => {
+      const rect = wrap.getBoundingClientRect();
+      const w = Math.max(320, Math.floor(rect.width));
+      const h = height;
+      sizeRef.current = { w, h };
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      const ctx = canvas.getContext("2d");
+      ctx?.setTransform(dpr, 0, 0, dpr, 0, 0);
+      buildWalls(w, h);
     };
+    setSize();
+    spawnAll();
 
-    const onPointerUp = (e: PointerEvent) => {
-      if (e.pointerId !== pointerId) return;
-      try {
-        canvas.releasePointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
-      }
-      releaseDrag();
+    const onMql = (e: MediaQueryListEvent) => {
+      reducedMotionRef.current = e.matches;
+      engine.gravity.y = e.matches ? 0 : 1;
+      spawnAll();
     };
+    mql.addEventListener?.("change", onMql);
 
-    const onPointerCancel = (e: PointerEvent) => {
-      if (e.pointerId !== pointerId) return;
-      releaseDrag();
-    };
-
-    // touch-action: pan-y allows native vertical scroll over empty canvas.
-    canvas.style.touchAction = "pan-y";
-    canvas.addEventListener("pointerdown", onPointerDown);
-    canvas.addEventListener("pointermove", onPointerMove);
-    canvas.addEventListener("pointerup", onPointerUp);
-    canvas.addEventListener("pointercancel", onPointerCancel);
-
-    // ---------------- Settle damper ----------------
-    Events.on(engine, "afterUpdate", () => {
-      for (const b of bodiesRef.current) {
-        if (b === dragBody) continue;
-        if (Math.abs(b.angularVelocity) > 0.5) {
-          Body.setAngularVelocity(b, Math.sign(b.angularVelocity) * 0.5);
-        }
-        const sp = Math.hypot(b.velocity.x, b.velocity.y);
-        if (sp < 0.06 && Math.abs(b.angularVelocity) < 0.02) {
-          Body.setVelocity(b, { x: 0, y: 0 });
-          Body.setAngularVelocity(b, 0);
-        }
-      }
+    const ro = new ResizeObserver(() => {
+      setSize();
+      spawnAll();
     });
+    ro.observe(wrap);
 
-    // ---------------- Render loop (manual rAF, no Matter.Render) ----------------
-    let rafId = 0;
-    let lastFrame = performance.now();
-    const FIXED_DT = 1000 / 60;
-    let acc = 0;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) visibleRef.current = e.isIntersecting;
+      },
+      { threshold: 0.05 },
+    );
+    io.observe(wrap);
 
-    const renderFrame = (now: number) => {
-      const delta = Math.min(50, now - lastFrame);
-      lastFrame = now;
-      acc += delta;
-      while (acc >= FIXED_DT) {
-        Engine.update(engine, FIXED_DT);
-        acc -= FIXED_DT;
-      }
+    const render = () => {
+      rafRef.current = requestAnimationFrame(render);
+      if (!visibleRef.current) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const { w, h } = sizeRef.current;
+      ctx.clearRect(0, 0, w, h);
 
-      // Draw
-      ctx.clearRect(0, 0, width, h);
-      ctx.font = `600 ${FONT_SIZE}px Inter, system-ui, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-
-      // Soft contact shadows near floor.
+      const now = performance.now();
       for (const b of bodiesRef.current) {
-        const meta = b as unknown as { __h?: number; __w?: number };
-        if (!meta.__h || !meta.__w) continue;
-        const distToFloor = h - (b.position.y + meta.__h / 2);
-        if (distToFloor < 26 && distToFloor > -2) {
-          const t = 1 - Math.max(0, Math.min(1, distToFloor / 26));
-          const shadowW = meta.__w * 0.45;
+        const dy = h - (b.position.y + b.__h / 2);
+        if (dy >= 0 && dy < 30) {
+          const alpha = (1 - dy / 30) * 0.18;
           ctx.save();
-          ctx.fillStyle = `rgba(15, 23, 42, ${0.08 * t})`;
+          ctx.fillStyle = `rgba(8, 18, 58, ${alpha})`;
           ctx.beginPath();
-          ctx.ellipse(b.position.x, h - 1, shadowW, 4, 0, 0, Math.PI * 2);
+          ctx.ellipse(b.position.x, h - 4, b.__w * 0.45, 6, 0, 0, Math.PI * 2);
           ctx.fill();
           ctx.restore();
         }
       }
 
-      // Pills
       for (const b of bodiesRef.current) {
-        const meta = b as unknown as {
-          __label?: string;
-          __w?: number;
-          __h?: number;
-          __bg?: string;
-          __fg?: string;
-        };
-        if (!meta.__label || !meta.__w || !meta.__h || !meta.__bg || !meta.__fg) continue;
-        const w = meta.__w;
-        const hh = meta.__h;
+        const { __w: w0, __h: h0, __palette: pal, __label } = b;
         ctx.save();
         ctx.translate(b.position.x, b.position.y);
         ctx.rotate(b.angle);
-        ctx.fillStyle = meta.__bg;
-        const r = hh / 2;
+
+        const grad = ctx.createLinearGradient(0, -h0 / 2, 0, h0 / 2);
+        const flash = b.__flashUntil && now < b.__flashUntil;
+        grad.addColorStop(0, flash ? lighten(pal.bgTop, 0.06) : pal.bgTop);
+        grad.addColorStop(0.5, flash ? lighten(pal.bg, 0.06) : pal.bg);
+        grad.addColorStop(1, pal.bgBottom);
+
+        const r = h0 / 2;
         ctx.beginPath();
-        ctx.moveTo(-w / 2 + r, -hh / 2);
-        ctx.lineTo(w / 2 - r, -hh / 2);
-        ctx.arc(w / 2 - r, 0, r, -Math.PI / 2, Math.PI / 2);
-        ctx.lineTo(-w / 2 + r, hh / 2);
-        ctx.arc(-w / 2 + r, 0, r, Math.PI / 2, -Math.PI / 2);
-        ctx.closePath();
+        roundRect(ctx, -w0 / 2, -h0 / 2, w0, h0, r);
+        ctx.fillStyle = grad;
         ctx.fill();
-        ctx.fillStyle = meta.__fg;
-        ctx.fillText(meta.__label, 0, 1);
+
+        ctx.save();
+        ctx.beginPath();
+        roundRect(ctx, -w0 / 2 + 1, -h0 / 2 + 1, w0 - 2, h0 / 2, r - 1);
+        const hl = ctx.createLinearGradient(0, -h0 / 2, 0, 0);
+        hl.addColorStop(0, "rgba(255,255,255,0.18)");
+        hl.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = hl;
+        ctx.fill();
+        ctx.restore();
+
+        ctx.fillStyle = pal.fg;
+        ctx.font = "600 16px Inter, system-ui, -apple-system, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(__label, 0, 1);
+
         ctx.restore();
       }
 
-      rafId = requestAnimationFrame(renderFrame);
+      const target = tagLockedRef.current ?? hoveredRef.current;
+      const tag = tagRef.current;
+      if (tag) {
+        if (target && bodiesRef.current.includes(target)) {
+          const x = target.position.x;
+          const y = target.position.y - target.__h / 2 - 12;
+          tag.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -100%)`;
+          tag.style.opacity = "1";
+        } else {
+          tag.style.opacity = "0";
+        }
+      }
     };
-    rafId = requestAnimationFrame(renderFrame);
+    rafRef.current = requestAnimationFrame(render);
 
-    // ---------------- Resize ----------------
-    const onResize = () => {
-      const newW = container.clientWidth;
-      if (newW === width) return;
-      const r = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-      canvas.width = Math.floor(newW * r);
-      canvas.height = Math.floor(h * r);
-      canvas.style.width = `${newW}px`;
-      canvas.style.height = `${h}px`;
-      const c = canvas.getContext("2d");
-      if (c) c.setTransform(r, 0, 0, r, 0, 0);
-      Body.setPosition(floor, { x: newW / 2, y: h + WALL_T / 2 });
-      Body.setPosition(leftWall, { x: -WALL_T / 2, y: h / 2 });
-      Body.setPosition(rightWall, { x: newW + WALL_T / 2, y: h / 2 });
-      Body.setPosition(ceiling, { x: newW / 2, y: -800 - WALL_T / 2 });
+    const getLocal = (clientX: number, clientY: number) => {
+      const rect = canvas.getBoundingClientRect();
+      return { x: clientX - rect.left, y: clientY - rect.top };
     };
-    window.addEventListener("resize", onResize);
 
-    // ---------------- Cleanup ----------------
+    const findPillAt = (x: number, y: number): ExtBody | null => {
+      const hits = Matter.Query.point(bodiesRef.current, { x, y }) as ExtBody[];
+      return hits[0] ?? null;
+    };
+
+    const showTagFor = (body: ExtBody) => {
+      const tag = tagRef.current;
+      const bar = tagBarRef.current;
+      if (!tag) return;
+      const labelEl = tag.querySelector("[data-label]") as HTMLElement | null;
+      const pctEl = tag.querySelector("[data-pct]") as HTMLElement | null;
+      if (labelEl) labelEl.textContent = body.__label;
+      const lvl = Math.max(0, Math.min(100, Math.round(body.__level ?? 0)));
+      if (pctEl) pctEl.textContent = `${lvl}%`;
+      if (bar) {
+        bar.style.width = `${lvl}%`;
+        bar.style.background = `linear-gradient(90deg, ${body.__palette.bg}, ${body.__palette.bgTop})`;
+      }
+      if (tagAutoHideRef.current) clearTimeout(tagAutoHideRef.current);
+      tagAutoHideRef.current = window.setTimeout(() => {
+        tagLockedRef.current = null;
+        hoveredRef.current = null;
+      }, 2500);
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      const { x, y } = getLocal(e.clientX, e.clientY);
+      const hit = findPillAt(x, y);
+      if (!hit) {
+        if (tagLockedRef.current) {
+          tagLockedRef.current = null;
+          hoveredRef.current = null;
+        }
+        return;
+      }
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch {}
+      const dx = x - hit.position.x;
+      const dy = y - hit.position.y;
+      const cos = Math.cos(-hit.angle);
+      const sin = Math.sin(-hit.angle);
+      const localBody = { x: dx * cos - dy * sin, y: dx * sin + dy * cos };
+      dragRef.current = {
+        kind: "pending-drag",
+        pointerId: e.pointerId,
+        body: hit,
+        localOffset: localBody,
+        startClient: { x: e.clientX, y: e.clientY },
+        startWorld: { x, y },
+      };
+
+      if (e.pointerType !== "mouse") {
+        if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = window.setTimeout(() => {
+          const cur = dragRef.current;
+          if (cur.kind === "pending-drag" && cur.body === hit) {
+            tagLockedRef.current = hit;
+            showTagFor(hit);
+          }
+        }, 200);
+      }
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      const { x, y } = getLocal(e.clientX, e.clientY);
+      const state = dragRef.current;
+
+      if (state.kind === "idle") {
+        if (e.pointerType === "mouse") {
+          const hit = findPillAt(x, y);
+          hoveredRef.current = hit;
+          if (hit) showTagFor(hit);
+          canvas.style.cursor = hit ? "grab" : "default";
+        }
+        return;
+      }
+
+      if (state.kind === "pending-drag") {
+        const dx = e.clientX - state.startClient.x;
+        const dy = e.clientY - state.startClient.y;
+        const total = Math.hypot(dx, dy);
+        if (total < 6) return;
+        if (e.pointerType !== "mouse" && Math.abs(dy) > Math.abs(dx) * 1.4) {
+          try {
+            canvas.releasePointerCapture(state.pointerId);
+          } catch {}
+          if (holdTimerRef.current) {
+            clearTimeout(holdTimerRef.current);
+            holdTimerRef.current = null;
+          }
+          dragRef.current = { kind: "idle" };
+          return;
+        }
+        if (holdTimerRef.current) {
+          clearTimeout(holdTimerRef.current);
+          holdTimerRef.current = null;
+        }
+        const stiffness = e.pointerType === "mouse" ? 0.22 : 0.32;
+        const constraint = Matter.Constraint.create({
+          pointA: { x, y },
+          bodyB: state.body,
+          pointB: state.localOffset,
+          stiffness,
+          damping: 0.08,
+          length: 0,
+        });
+        Matter.World.add(engine.world, constraint);
+        canvas.style.cursor = "grabbing";
+        dragRef.current = {
+          kind: "dragging",
+          pointerId: state.pointerId,
+          body: state.body,
+          constraint,
+          localOffset: state.localOffset,
+          samples: [{ t: performance.now(), x, y }],
+        };
+        return;
+      }
+
+      if (state.kind === "dragging") {
+        state.constraint.pointA = { x, y };
+        const v = state.body.velocity;
+        const sp = Math.hypot(v.x, v.y);
+        if (sp > 28) {
+          Matter.Body.setVelocity(state.body, { x: (v.x / sp) * 28, y: (v.y / sp) * 28 });
+        }
+        const t = performance.now();
+        state.samples.push({ t, x, y });
+        while (state.samples.length > 1 && t - state.samples[0].t > 80) state.samples.shift();
+      }
+    };
+
+    const finishPointer = (e: PointerEvent) => {
+      const state = dragRef.current;
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+      if (state.kind === "dragging" && state.pointerId === e.pointerId) {
+        const samples = state.samples;
+        if (samples.length >= 2) {
+          const a = samples[0];
+          const b = samples[samples.length - 1];
+          const dt = Math.max(1, b.t - a.t);
+          let vx = ((b.x - a.x) / dt) * 16;
+          let vy = ((b.y - a.y) / dt) * 16;
+          const sp = Math.hypot(vx, vy);
+          if (sp > 24) {
+            vx = (vx / sp) * 24;
+            vy = (vy / sp) * 24;
+          }
+          Matter.Body.setVelocity(state.body, { x: vx, y: vy });
+        }
+        Matter.World.remove(engine.world, state.constraint);
+        try {
+          canvas.releasePointerCapture(state.pointerId);
+        } catch {}
+        canvas.style.cursor = "default";
+      } else if (state.kind === "pending-drag" && state.pointerId === e.pointerId) {
+        try {
+          canvas.releasePointerCapture(state.pointerId);
+        } catch {}
+      }
+      dragRef.current = { kind: "idle" };
+    };
+
+    const onPointerLeave = () => {
+      if (dragRef.current.kind === "idle") {
+        hoveredRef.current = null;
+        canvas.style.cursor = "default";
+      }
+    };
+
+    canvas.addEventListener("pointerdown", onPointerDown);
+    canvas.addEventListener("pointermove", onPointerMove, { passive: true });
+    canvas.addEventListener("pointerup", finishPointer);
+    canvas.addEventListener("pointercancel", finishPointer);
+    canvas.addEventListener("pointerleave", onPointerLeave);
+
+    let lastScrollY = window.scrollY;
+    let scrollRaf = 0;
+    const onScroll = () => {
+      if (scrollRaf) return;
+      scrollRaf = requestAnimationFrame(() => {
+        scrollRaf = 0;
+        if (!visibleRef.current) {
+          lastScrollY = window.scrollY;
+          return;
+        }
+        const dy = window.scrollY - lastScrollY;
+        lastScrollY = window.scrollY;
+        const isCoarse = window.matchMedia("(pointer: coarse)").matches;
+        if (isCoarse) return;
+        const k = Math.max(-12, Math.min(12, dy)) * 0.0006;
+        for (const b of bodiesRef.current) {
+          Matter.Body.applyForce(b, b.position, {
+            x: (Math.random() - 0.5) * 0.0006,
+            y: -k,
+          });
+          const v = b.velocity;
+          const sp = Math.hypot(v.x, v.y);
+          if (sp > 12)
+            Matter.Body.setVelocity(b, { x: (v.x / sp) * 12, y: (v.y / sp) * 12 });
+        }
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+
+    try {
+      if (!sessionStorage.getItem("pp:hint:v1")) {
+        setShowHint(true);
+        sessionStorage.setItem("pp:hint:v1", "1");
+        setTimeout(() => setShowHint(false), 4500);
+      }
+    } catch {}
+
     return () => {
-      cancelAnimationFrame(rafId);
-      clearTimers();
-      window.clearInterval(cleanupId);
+      mql.removeEventListener?.("change", onMql);
+      ro.disconnect();
+      io.disconnect();
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      clearSpawnTimers();
+      window.removeEventListener("scroll", onScroll);
       canvas.removeEventListener("pointerdown", onPointerDown);
       canvas.removeEventListener("pointermove", onPointerMove);
-      canvas.removeEventListener("pointerup", onPointerUp);
-      canvas.removeEventListener("pointercancel", onPointerCancel);
-      window.removeEventListener("resize", onResize);
-      Composite.clear(engine.world, false);
-      Engine.clear(engine);
+      canvas.removeEventListener("pointerup", finishPointer);
+      canvas.removeEventListener("pointercancel", finishPointer);
+      canvas.removeEventListener("pointerleave", onPointerLeave);
+      Matter.Runner.stop(runner);
+      Matter.World.clear(engine.world, false);
+      Matter.Engine.clear(engine);
       engineRef.current = null;
-      worldRef.current = null;
+      runnerRef.current = null;
       bodiesRef.current = [];
-      spawnFnRef.current = null;
+      wallsRef.current = [];
     };
-  }, [pills, height, started]);
+  }, [height, pillData]);
 
   return (
     <div
-      ref={sceneRef}
-      className={`relative w-full ${className}`}
+      ref={wrapRef}
+      className="relative w-full select-none"
       style={{ height, touchAction: "pan-y" }}
     >
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 w-full h-full"
+        className="absolute inset-0 block"
         style={{ touchAction: "pan-y" }}
       />
+      <div
+        ref={tagRef}
+        className="pointer-events-none absolute left-0 top-0 z-10 transition-opacity duration-150"
+        style={{ opacity: 0, willChange: "transform, opacity" }}
+      >
+        <div className="relative inline-flex flex-col gap-1.5 rounded-2xl border border-border/60 bg-background/95 px-3 py-2 shadow-lg backdrop-blur min-w-[140px]">
+          <div className="flex items-center justify-between gap-3 text-xs font-medium">
+            <span data-label className="text-foreground" />
+            <span data-pct className="tabular-nums text-muted-foreground" />
+          </div>
+          <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              ref={tagBarRef}
+              className="h-full rounded-full transition-[width] duration-200"
+              style={{ width: "0%" }}
+            />
+          </div>
+          <div className="absolute left-1/2 -bottom-1.5 h-3 w-3 -translate-x-1/2 rotate-45 border-b border-r border-border/60 bg-background/95" />
+        </div>
+      </div>
+      {showHint && (
+        <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border border-border/60 bg-background/80 px-3 py-1 text-[11px] text-muted-foreground backdrop-blur">
+          <span dir="auto">
+            Hover or hold a pill to see its level · مرّر فوق العنصر أو اضغط مطولًا
+          </span>
+        </div>
+      )}
     </div>
   );
 });
+
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  const rr = Math.min(r, h / 2, w / 2);
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+  ctx.lineTo(x + w, y + h - rr);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+  ctx.lineTo(x + rr, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+  ctx.lineTo(x, y + rr);
+  ctx.quadraticCurveTo(x, y, x + rr, y);
+}
+
+function lighten(hex: string, amount: number) {
+  const m = hex.replace("#", "");
+  const num = parseInt(m, 16);
+  let r = (num >> 16) & 0xff;
+  let g = (num >> 8) & 0xff;
+  let b = num & 0xff;
+  r = Math.min(255, Math.round(r + 255 * amount));
+  g = Math.min(255, Math.round(g + 255 * amount));
+  b = Math.min(255, Math.round(b + 255 * amount));
+  return `rgb(${r}, ${g}, ${b})`;
+}

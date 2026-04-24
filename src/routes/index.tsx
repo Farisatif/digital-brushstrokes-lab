@@ -62,7 +62,7 @@ function Index() {
         <ExperienceSection />
       </SectionBand>
 
-      <SectionBand variant="primary" pattern="grid" divider>
+      <SectionBand variant="light" pattern="grid-fine" divider>
         <ProjectsSection />
       </SectionBand>
 
