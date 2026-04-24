@@ -263,7 +263,7 @@ export function Comments() {
                 data-cursor-label={t("Send", "إرسال")}
                 className="inline-flex items-center gap-2 rounded-full bg-foreground text-background px-5 py-2.5 text-sm hover:bg-foreground/90 transition-colors disabled:opacity-60 will-change-transform"
               >
-                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {submitting ? <DotPulse /> : <Send className="h-4 w-4" />}
                 {t("Post", "نشر")}
               </button>
             </div>

@@ -116,7 +116,7 @@ export function CommentsAdmin({ password }: { password: string }) {
           onClick={load}
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
-          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} /> Refresh
+          {loading ? <DotPulse /> : <RefreshCw className="h-3.5 w-3.5" />} Refresh
         </button>
       </div>
 
