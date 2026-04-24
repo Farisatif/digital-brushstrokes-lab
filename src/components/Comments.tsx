@@ -181,7 +181,10 @@ export function Comments() {
       toast.error(t("Could not post your comment", "تعذر نشر تعليقك"), { description: error.message });
       return;
     }
-    toast.success(t("Comment posted", "تم نشر التعليق"));
+    toast.success(
+      t("Submitted for review", "تم الإرسال للمراجعة"),
+      { description: t("Your comment will appear once approved.", "سيظهر تعليقك بعد الموافقة عليه.") },
+    );
     setMessage("");
     setIsTyping(false);
   };
