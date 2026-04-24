@@ -66,7 +66,9 @@ function Index() {
         <ProjectsSection />
       </SectionBand>
 
-      <SectionBand variant="light" pattern="grid-fine" divider>
+      {/* Signature inverted band — black in light theme, white in dark theme.
+          No pattern overlay so the surface stays clean and dramatic. */}
+      <SectionBand variant="dark" pattern="none" divider>
         <AchievementsSection />
       </SectionBand>
 
