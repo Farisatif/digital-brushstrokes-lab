@@ -253,8 +253,8 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       if (samples.length > MAX_SAMPLES) samples.shift();
     };
 
-    Matter.Events.on(mouseConstraint, "startdrag", (e: { body: Matter.Body }) => {
-      draggedBody = e.body;
+    Matter.Events.on(mouseConstraint, "startdrag", (e) => {
+      draggedBody = (e as unknown as { body: Matter.Body }).body;
       if (draggedBody) {
         savedFrictionAir = draggedBody.frictionAir;
         savedFriction = draggedBody.friction;
