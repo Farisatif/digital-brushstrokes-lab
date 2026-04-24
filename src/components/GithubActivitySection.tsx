@@ -390,7 +390,7 @@ function Stat({
         className="mt-1 font-display text-2xl sm:text-3xl tabular-nums transition-colors"
         style={{ color: loading ? undefined : color }}
       >
-        {loading ? <Skeleton className="inline-block h-7 w-12 rounded-md align-middle" /> : value}
+        {loading ? <Skeleton as="span" className="inline-block h-7 w-12 rounded-md align-middle" /> : value}
       </div>
       <div className="mt-2 flex items-center gap-[3px]" aria-hidden="true">
         {[0, 1, 2, 3, 4].map((l) => (
