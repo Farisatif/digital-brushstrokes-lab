@@ -4,7 +4,7 @@ import { listAllComments, deleteComment, setCommentStatus } from "@/utils/settin
 import { Trash2, Check, X, RefreshCw, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton, DotPulse } from "@/components/ui/skeleton";
 
 type Status = "pending" | "approved" | "rejected";
 type Row = { id: string; author_name: string; message: string; created_at: string; status: Status };
@@ -116,7 +116,7 @@ export function CommentsAdmin({ password }: { password: string }) {
           onClick={load}
           className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
-          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} /> Refresh
+          {loading ? <DotPulse /> : <RefreshCw className="h-3.5 w-3.5" />} Refresh
         </button>
       </div>
 

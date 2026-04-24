@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Github, Star, GitFork, ExternalLink, Users, BookMarked, RefreshCw, Loader2 } from "lucide-react";
+import { Github, Star, GitFork, ExternalLink, Users, BookMarked, RefreshCw } from "lucide-react";
 import { Reveal } from "./Reveal";
 import { useSiteData } from "./SiteDataProvider";
 import { useLang } from "./LanguageProvider";
 import { getGithubBundle, type GithubBundle } from "@/utils/github.functions";
 import { GlowDots } from "./GlowDots";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton, DotPulse } from "@/components/ui/skeleton";
 
 const CELL = 12; // px
 const GAP = 4; // px
@@ -238,7 +238,7 @@ export function GithubActivitySection() {
               disabled={refreshing}
               className="inline-flex items-center gap-2 rounded-full border border-border bg-background hover:bg-secondary px-4 py-2 text-xs disabled:opacity-50 transition"
             >
-              {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              {refreshing ? <DotPulse /> : <RefreshCw className="h-3.5 w-3.5" />}
               {t("Refresh", "تحديث")}
             </button>
           </div>
@@ -310,7 +310,11 @@ export function GithubActivitySection() {
               </div>
             </div>
             <div className="overflow-x-auto no-scrollbar">
-              <Heatmap grid={grid} t={t} />
+              {loading && !grid ? (
+                <HeatmapSkeleton />
+              ) : (
+                <Heatmap grid={grid} t={t} />
+              )}
               <div className="sm:hidden flex items-center gap-1.5 text-[10px] text-muted-foreground mt-3 justify-end">
                 <span>{t("Less", "أقل")}</span>
                 {[0, 1, 2, 3, 4].map((l) => (
@@ -329,7 +333,9 @@ export function GithubActivitySection() {
         {/* Top repos */}
         <Reveal delay={0.2}>
           <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {(repos.length ? repos.slice(0, 6) : data.projects.slice(0, 6).map(staticToRepo)).map((r) => (
+            {loading && !repos.length
+              ? Array.from({ length: 6 }).map((_, i) => <RepoCardSkeleton key={i} />)
+              : (repos.length ? repos.slice(0, 6) : data.projects.slice(0, 6).map(staticToRepo)).map((r) => (
               <a
                 key={r.html_url}
                 href={r.html_url}
@@ -360,6 +366,61 @@ export function GithubActivitySection() {
         </Reveal>
       </div>
     </section>
+  );
+}
+
+/** Skeleton mirror of the contributions heatmap — same exact dimensions. */
+function HeatmapSkeleton() {
+  const LEFT_PAD = 28;
+  const TOP_PAD = 18;
+  const COLS = 52;
+  const ROWS = 7;
+  return (
+    <div
+      className="relative skeleton-content-in"
+      dir="ltr"
+      style={{ paddingLeft: LEFT_PAD, paddingTop: TOP_PAD }}
+    >
+      <div className="flex" style={{ gap: `${GAP}px` }}>
+        {Array.from({ length: COLS }).map((_, wi) => (
+          <div key={wi} className="flex flex-col" style={{ gap: `${GAP}px` }}>
+            {Array.from({ length: ROWS }).map((_, di) => (
+              <Skeleton
+                key={di}
+                as="span"
+                className="block rounded-[2px]"
+                style={{
+                  width: CELL,
+                  height: CELL,
+                  animationDelay: `${(wi + di) * 18}ms`,
+                }}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Skeleton mirror of a top-repo card — preserves card height to avoid jump. */
+function RepoCardSkeleton() {
+  return (
+    <div className="rounded-2xl border border-border bg-background/60 backdrop-blur-md p-4 sm:p-5 flex flex-col gap-3 skeleton-content-in">
+      <div className="flex items-start justify-between gap-3">
+        <Skeleton variant="title" className="h-5 w-1/2" />
+        <Skeleton className="h-3.5 w-3.5 rounded-md shrink-0 mt-1" />
+      </div>
+      <div className="space-y-1.5 min-h-[2.4em]">
+        <Skeleton variant="text" className="h-2.5 w-[92%]" />
+        <Skeleton variant="text" className="h-2.5 w-[70%]" />
+      </div>
+      <div className="flex items-center gap-3 mt-auto">
+        <Skeleton className="h-2.5 w-14 rounded-full" />
+        <Skeleton className="h-2.5 w-8 rounded-full" />
+        <Skeleton className="h-2.5 w-8 rounded-full" />
+      </div>
+    </div>
   );
 }
 

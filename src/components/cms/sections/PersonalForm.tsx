@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Github, Loader2, RefreshCw } from "lucide-react";
+import { Github, RefreshCw } from "lucide-react";
+import { DotPulse } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import type { SiteData } from "@/components/SiteDataProvider";
 import { Field, TextInput } from "../Field";
@@ -74,7 +75,7 @@ export function PersonalForm({ data, onChange }: { data: SiteData; onChange: (d:
             disabled={syncing || !username}
             className="inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-full bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition"
           >
-            {syncing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            {syncing ? <DotPulse /> : <RefreshCw className="h-3 w-3" />}
             Sync stats
           </button>
         </div>

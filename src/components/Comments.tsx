@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Send, Loader2, MessageSquareText } from "lucide-react";
+import { Send, MessageSquareText } from "lucide-react";
 import { toast } from "sonner";
 import { Reveal } from "./Reveal";
 import { useLang } from "./LanguageProvider";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton, DotPulse } from "@/components/ui/skeleton";
 
 type Comment = {
   id: string;
@@ -263,7 +263,7 @@ export function Comments() {
                 data-cursor-label={t("Send", "إرسال")}
                 className="inline-flex items-center gap-2 rounded-full bg-foreground text-background px-5 py-2.5 text-sm hover:bg-foreground/90 transition-colors disabled:opacity-60 will-change-transform"
               >
-                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {submitting ? <DotPulse /> : <Send className="h-4 w-4" />}
                 {t("Post", "نشر")}
               </button>
             </div>

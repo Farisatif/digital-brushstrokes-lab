@@ -414,32 +414,77 @@
 
   /* ---------- Skeleton loading: shimmer + graceful fade ---------- */
   @keyframes skeleton-shimmer {
-    0%   { background-position: -150% 0; }
-    100% { background-position: 150% 0; }
+    0%   { background-position: -160% 0; }
+    100% { background-position: 160% 0; }
+  }
+  @keyframes skeleton-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.72; }
   }
   .skeleton {
     position: relative;
     overflow: hidden;
-    background-color: color-mix(in oklab, var(--foreground) 8%, transparent);
+    isolation: isolate;
+    background-color: color-mix(in oklab, var(--foreground) 7%, transparent);
     background-image: linear-gradient(
-      100deg,
-      transparent 35%,
-      color-mix(in oklab, var(--foreground) 6%, transparent) 50%,
-      transparent 65%
+      105deg,
+      transparent 30%,
+      color-mix(in oklab, var(--foreground) 9%, transparent) 50%,
+      transparent 70%
     );
-    background-size: 220% 100%;
+    background-size: 280% 100%;
     background-repeat: no-repeat;
-    animation: skeleton-shimmer 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-    will-change: background-position;
+    background-position: -160% 0;
+    animation:
+      skeleton-shimmer 2.4s cubic-bezier(0.45, 0, 0.25, 1) infinite,
+      skeleton-pulse 3s ease-in-out infinite;
+    will-change: background-position, opacity;
+  }
+  /* Container that swaps skeleton -> content. The skeleton dissolves
+     while real content rises in, with no layout jump. */
+  .skeleton-wrap {
+    position: relative;
   }
   .skeleton-fade-out {
-    animation: fade-in 0.4s ease-out reverse forwards;
+    animation: skeleton-dissolve 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+    pointer-events: none;
+  }
+  @keyframes skeleton-dissolve {
+    0%   { opacity: 1; filter: blur(0); }
+    100% { opacity: 0; filter: blur(4px); transform: scale(0.985); }
   }
   .skeleton-content-in {
-    animation: fade-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: skeleton-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  @keyframes skeleton-rise {
+    0%   { opacity: 0; transform: translateY(6px); filter: blur(4px); }
+    60%  { filter: blur(0); }
+    100% { opacity: 1; transform: translateY(0); filter: blur(0); }
+  }
+  /* Inline pulse-dots used inside buttons in place of spinning loaders. */
+  .dot-pulse {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .dot-pulse > span {
+    width: 5px;
+    height: 5px;
+    border-radius: 9999px;
+    background: currentColor;
+    opacity: 0.55;
+    animation: dot-pulse-bounce 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  .dot-pulse > span:nth-child(2) { animation-delay: 0.18s; }
+  .dot-pulse > span:nth-child(3) { animation-delay: 0.36s; }
+  @keyframes dot-pulse-bounce {
+    0%, 80%, 100% { transform: translateY(0); opacity: 0.45; }
+    40%           { transform: translateY(-3px); opacity: 1; }
   }
   @media (prefers-reduced-motion: reduce) {
     .skeleton { animation: none !important; }
+    .skeleton-fade-out, .skeleton-content-in { animation: none !important; }
+    .dot-pulse > span { animation: none !important; opacity: 0.7 !important; }
   }
 
   /* ---------- First-load boot cascade ---------- */

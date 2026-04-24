@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Loader2, KeyRound, RefreshCw, Copy, Check, ShieldCheck } from "lucide-react";
+import { KeyRound, RefreshCw, Copy, Check, ShieldCheck } from "lucide-react";
+import { DotPulse } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { rotateRecoveryCode, changeAdminPassword } from "@/utils/settings.functions";
 
@@ -104,7 +105,7 @@ export function SecurityForm({ password }: { password: string }) {
             disabled={changing || !newPw || !confirmPw}
             className="inline-flex items-center gap-1.5 text-xs px-4 py-2 rounded-full bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50"
           >
-            {changing ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
+            {changing ? <DotPulse /> : <KeyRound className="h-3 w-3" />}
             Change password
           </button>
         </div>
@@ -152,7 +153,7 @@ export function SecurityForm({ password }: { password: string }) {
             disabled={rotating}
             className="inline-flex items-center gap-1.5 text-xs px-4 py-2 rounded-full bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50"
           >
-            {rotating ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+            {rotating ? <DotPulse /> : <RefreshCw className="h-3 w-3" />}
             Generate new recovery code
           </button>
         )}

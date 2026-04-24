@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
-  Settings2, X, Save, Loader2, Lock, LogOut, KeyRound, Copy, Check,
+  Settings2, X, Save, Lock, LogOut, KeyRound, Copy, Check,
   User, Code2, Briefcase, FolderKanban, GraduationCap, Trophy, Languages,
   MessageSquare, Shield, AlertTriangle, Sparkles, Menu, Database, WifiOff,
 } from "lucide-react";
+import { DotPulse } from "@/components/ui/skeleton";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import {
@@ -324,7 +325,7 @@ export function SettingsDrawer() {
                       {dbStatus === "offline" ? (
                         <WifiOff className="h-2.5 w-2.5" />
                       ) : dbStatus === "checking" ? (
-                        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                        <DotPulse />
                       ) : (
                         <Database className="h-2.5 w-2.5" />
                       )}
@@ -356,7 +357,7 @@ export function SettingsDrawer() {
                       disabled={saving}
                       className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 text-xs px-3 py-2 sm:py-1.5 rounded-full bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition-colors"
                     >
-                      {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                      {saving ? <DotPulse /> : <Save className="h-3 w-3" />}
                       {saving ? "Saving…" : "Save all"}
                     </button>
                   )}
@@ -445,7 +446,7 @@ export function SettingsDrawer() {
                             disabled={resetting || !resetCode || !resetNew}
                             className="flex-1 inline-flex items-center justify-center gap-1.5 text-xs px-4 py-2.5 rounded-full bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50"
                           >
-                            {resetting ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
+                            {resetting ? <DotPulse /> : <KeyRound className="h-3 w-3" />}
                             Reset password
                           </button>
                         </div>
@@ -474,7 +475,7 @@ export function SettingsDrawer() {
                         disabled={isLocked || verifying || !password}
                         className="inline-flex items-center justify-center gap-1.5 text-xs px-5 py-3 rounded-full bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50"
                       >
-                        {verifying ? <Loader2 className="h-3 w-3 animate-spin" /> : <Lock className="h-3 w-3" />}
+                        {verifying ? <DotPulse /> : <Lock className="h-3 w-3" />}
                         {isLocked ? "Locked" : "Unlock"}
                       </button>
                     </div>
