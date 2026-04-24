@@ -113,9 +113,15 @@ async function checkPassword(password: string): Promise<PasswordCheck> {
       return { ok: false, error: "Invalid password" };
     }
     return { ok: true };
-  } catch {
+  } catch (error) {
     recordFail(key);
-    return { ok: false, error: "Invalid password" };
+    return {
+      ok: false,
+      error:
+        error instanceof Error && error.message
+          ? error.message
+          : "Invalid password",
+    };
   }
 }
 
