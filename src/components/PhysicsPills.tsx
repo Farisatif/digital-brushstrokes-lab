@@ -4,7 +4,6 @@ import Matter from "matter-js";
 interface PillData {
   label: string;
   variant: number;
-  weight?: "bold" | "medium";
 }
 
 interface Props {
@@ -17,26 +16,25 @@ export interface PhysicsPillsHandle {
   replay: () => void;
 }
 
-const PALETTE = [
-  { bg: "#BFD7F2", fg: "#0B2A4A" },
+/**
+ * Kitsys-faithful palette: soft pastels + bold blue accents on neutral fg.
+ * Mirrors the original "fallbox" v1..v12 styling — flat solid pills, no
+ * gradients, no borders, no shadows beyond a soft contact ellipse.
+ */
+const PALETTE: { bg: string; fg: string }[] = [
+  { bg: "#DCE6F7", fg: "#0B2A4A" },
   { bg: "#1E3A8A", fg: "#FFFFFF" },
-  { bg: "#2563EB", fg: "#FFFFFF" },
-  { bg: "#3B82F6", fg: "#FFFFFF" },
-  { bg: "#A5B4FC", fg: "#1E2A6B" },
+  { bg: "#CFE8FF", fg: "#0B2A4A" },
   { bg: "#0F172A", fg: "#FFFFFF" },
+  { bg: "#E6ECFB", fg: "#1E2A6B" },
+  { bg: "#1D4ED8", fg: "#FFFFFF" },
+  { bg: "#EFF3FB", fg: "#0B2A4A" },
+  { bg: "#3B82F6", fg: "#FFFFFF" },
+  { bg: "#C7D2FE", fg: "#1E2A6B" },
+  { bg: "#2563EB", fg: "#FFFFFF" },
+  { bg: "#F1F5FB", fg: "#0B2A4A" },
+  { bg: "#A5B4FC", fg: "#1E2A6B" },
 ];
-
-// Lighten/darken a hex color by amount (0..1).
-function shadeHex(hex: string, amount: number): string {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  const adj = (c: number) =>
-    Math.max(0, Math.min(255, Math.round(amount >= 0 ? c + (255 - c) * amount : c * (1 + amount))));
-  const to = (c: number) => c.toString(16).padStart(2, "0");
-  return `#${to(adj(r))}${to(adj(g))}${to(adj(b))}`;
-}
 
 export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function PhysicsPills(
   { pills, height = 720, className = "" },
@@ -57,6 +55,7 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     },
   }));
 
+  // Trigger only when the section enters the viewport — saves CPU above the fold.
   useEffect(() => {
     if (!sceneRef.current) return;
     const el = sceneRef.current;
@@ -69,7 +68,7 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
           }
         });
       },
-      { rootMargin: "-10% 0px" },
+      { rootMargin: "-8% 0px" },
     );
     io.observe(el);
     return () => io.disconnect();
@@ -81,21 +80,15 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     const width = container.clientWidth;
     const h = height;
 
-    const Engine = Matter.Engine;
-    const Render = Matter.Render;
-    const Runner = Matter.Runner;
-    const Bodies = Matter.Bodies;
-    const Composite = Matter.Composite;
-    const Mouse = Matter.Mouse;
-    const MouseConstraint = Matter.MouseConstraint;
+    const { Engine, Render, Runner, Bodies, Composite, Mouse, MouseConstraint } = Matter;
 
     const engine = Engine.create({
-      gravity: { x: 0, y: 1, scale: 0.0014 },
+      // Slightly heavier gravity for a Kitsys-style weighty drop.
+      gravity: { x: 0, y: 1, scale: 0.0017 },
       positionIterations: 14,
       velocityIterations: 12,
       constraintIterations: 4,
     });
-    engine.timing.timeScale = 1;
     engineRef.current = engine;
     worldRef.current = engine.world;
 
@@ -113,74 +106,68 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
 
     const ctx = canvasRef.current.getContext("2d")!;
 
-    // Sizing — slightly smaller for breathing room near walls.
+    // Sizing — Kitsys-style chunky pills with generous padding.
     const isMobile = width < 640;
-    const FONT_SIZE = isMobile ? 16 : 18;
-    const PAD_X = 23;
-    const PILL_H = isMobile ? 41 : 47;
-    const MIN_W = 82;
+    const FONT_SIZE = isMobile ? 17 : 19;
+    const PAD_X = isMobile ? 22 : 26;
+    const PILL_H = isMobile ? 44 : 52;
+    const MIN_W = 90;
 
-    ctx.font = `600 ${FONT_SIZE}px Inter, sans-serif`;
+    ctx.font = `600 ${FONT_SIZE}px Inter, system-ui, sans-serif`;
 
     const measured = pills.map((p) => {
       const textW = ctx.measureText(p.label).width;
       return Math.max(MIN_W, textW + PAD_X * 2);
     });
 
-    // Walls placed AT the visible canvas edges (not outside). Pills stop at the
-    // visible boundary, fully visible and fully clickable. Wall thickness 60px
-    // sits OUTSIDE the canvas (negative coordinates), so the inner face aligns
-    // exactly with x=0 / x=width / y=h.
+    // Walls flush with visible edges.
     const WALL_T = 60;
     const wallOpts = {
       isStatic: true,
-      friction: 0.02,
-      frictionStatic: 0.25,
-      restitution: 0.04,
+      friction: 0.04,
+      frictionStatic: 0.4,
+      restitution: 0.02,
       slop: 0.04,
       render: { visible: false },
     };
     const floor = Bodies.rectangle(width / 2, h + WALL_T / 2, width * 2, WALL_T, wallOpts);
     const leftWall = Bodies.rectangle(-WALL_T / 2, h / 2, WALL_T, h * 2, wallOpts);
     const rightWall = Bodies.rectangle(width + WALL_T / 2, h / 2, WALL_T, h * 2, wallOpts);
-    // Top wall (well above visible area) prevents touch-drag slingshots from
-    // launching pills off-screen upward and never returning.
     const topWall = Bodies.rectangle(width / 2, -WALL_T / 2 - 200, width * 2, WALL_T, wallOpts);
     Composite.add(engine.world, [floor, leftWall, rightWall, topWall]);
 
     const makePillBody = (i: number): Matter.Body => {
       const p = pills[i];
-      const palette = PALETTE[(p.variant - 1) % PALETTE.length];
+      const palette = PALETTE[(p.variant - 1 + PALETTE.length) % PALETTE.length];
       const w = measured[i];
       const hh = PILL_H;
-      // Distribute spawn x across full width using a golden-ratio sequence
-      // so pills don't pile up on the centerline and create jitter.
-      const margin = w / 2 + 8;
+      const margin = w / 2 + 10;
       const usable = Math.max(1, width - margin * 2);
       const phi = 0.61803398875;
       const t = (i * phi) % 1;
-      const x = margin + t * usable + (Math.random() - 0.5) * 12;
-      const y = -hh - 30 - (i % 4) * 90 - Math.random() * 80;
+      const x = margin + t * usable + (Math.random() - 0.5) * 14;
+      const y = -hh - 40 - (i % 4) * 110 - Math.random() * 90;
       const body = Bodies.rectangle(x, y, w, hh, {
         chamfer: { radius: hh / 2 },
-        restitution: 0.06,
-        friction: 0.18,
-        frictionStatic: 0.55,
-        frictionAir: 0.012,
-        density: 0.0018,
-        angle: (Math.random() - 0.5) * 0.4,
+        // Lower restitution + higher friction = Kitsys dead-weight settle.
+        restitution: 0.05,
+        friction: 0.32,
+        frictionStatic: 0.7,
+        frictionAir: 0.014,
+        density: 0.002,
+        angle: (Math.random() - 0.5) * 0.5,
         slop: 0.04,
         render: { fillStyle: "transparent", strokeStyle: "transparent", lineWidth: 0 },
       });
-      Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.06);
-      Matter.Body.setVelocity(body, { x: (Math.random() - 0.5) * 0.9, y: 0 });
-      (body as any).__label = p.label;
-      (body as any).__fg = palette.fg;
-      (body as any).__bg = palette.bg;
-      (body as any).__fontSize = FONT_SIZE;
-      (body as any).__w = w;
-      (body as any).__h = hh;
-      (body as any).__spawnAt = performance.now();
+      Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.05);
+      Matter.Body.setVelocity(body, { x: (Math.random() - 0.5) * 0.7, y: 0 });
+      const anyB = body as unknown as Record<string, unknown>;
+      anyB.__label = p.label;
+      anyB.__fg = palette.fg;
+      anyB.__bg = palette.bg;
+      anyB.__w = w;
+      anyB.__h = hh;
+      anyB.__spawnAt = performance.now();
       return body;
     };
 
@@ -197,7 +184,7 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       bodiesRef.current = [];
 
       pills.forEach((_, i) => {
-        const delay = 200 + i * (80 + Math.random() * 50);
+        const delay = 220 + i * (95 + Math.random() * 55);
         const id = window.setTimeout(() => {
           if (!worldRef.current) return;
           const body = makePillBody(i);
@@ -230,7 +217,13 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     // ---- Mouse / touch ----
     const canvasEl = canvasRef.current;
     const mouse = Mouse.create(canvasEl);
-    const m = mouse as any;
+    const m = mouse as unknown as {
+      element?: HTMLElement;
+      mousewheel?: EventListener;
+      touchmove?: EventListener;
+      touchstart?: EventListener;
+      touchend?: EventListener;
+    };
     if (m.element && m.mousewheel) m.element.removeEventListener("wheel", m.mousewheel);
     if (m.element && m.touchmove) m.element.removeEventListener("touchmove", m.touchmove);
     if (m.element && m.touchstart) m.element.removeEventListener("touchstart", m.touchstart);
@@ -238,12 +231,11 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
 
     const mouseConstraint = MouseConstraint.create(engine, {
       mouse,
-      constraint: { stiffness: 0.22, damping: 0.18, render: { visible: false } },
+      constraint: { stiffness: 0.22, damping: 0.2, render: { visible: false } },
     });
     Composite.add(engine.world, mouseConstraint);
     render.mouse = mouse;
 
-    // Throw-to-fling: track recent pointer samples and apply velocity on release.
     type Sample = { x: number; y: number; t: number };
     const samples: Sample[] = [];
     const MAX_SAMPLES = 6;
@@ -255,21 +247,21 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     let draggedBody: Matter.Body | null = null;
 
     const pushSample = () => {
-      const pos = (mouse as any).position as { x: number; y: number };
+      const pos = (mouse as unknown as { position?: { x: number; y: number } }).position;
       if (!pos) return;
       samples.push({ x: pos.x, y: pos.y, t: performance.now() });
       if (samples.length > MAX_SAMPLES) samples.shift();
     };
 
-    Matter.Events.on(mouseConstraint, "startdrag", (e: any) => {
-      draggedBody = e.body as Matter.Body;
+    Matter.Events.on(mouseConstraint, "startdrag", (e) => {
+      draggedBody = (e as unknown as { body: Matter.Body }).body;
       if (draggedBody) {
         savedFrictionAir = draggedBody.frictionAir;
         savedFriction = draggedBody.friction;
         savedDensity = draggedBody.density;
-        (draggedBody as any).frictionAir = 0.001;
-        (draggedBody as any).friction = 0;
-        Matter.Body.setDensity(draggedBody, Math.max(0.0008, (savedDensity ?? 0.0018) * 0.7));
+        draggedBody.frictionAir = 0.001;
+        draggedBody.friction = 0;
+        Matter.Body.setDensity(draggedBody, Math.max(0.0008, (savedDensity ?? 0.002) * 0.7));
       }
       samples.length = 0;
       pushSample();
@@ -278,23 +270,16 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
 
     Matter.Events.on(mouseConstraint, "enddrag", () => {
       const body = draggedBody;
-      if (body && savedFrictionAir !== null) {
-        (body as any).frictionAir = savedFrictionAir;
-      }
-      if (body && savedFriction !== null) {
-        (body as any).friction = savedFriction;
-      }
-      if (body && savedDensity !== null) {
-        Matter.Body.setDensity(body, savedDensity);
-      }
-      // Compute throw velocity from samples within window.
+      if (body && savedFrictionAir !== null) body.frictionAir = savedFrictionAir;
+      if (body && savedFriction !== null) body.friction = savedFriction;
+      if (body && savedDensity !== null) Matter.Body.setDensity(body, savedDensity);
       if (body && samples.length >= 2) {
         const now = performance.now();
         const recent = samples.filter((s) => now - s.t <= THROW_WINDOW_MS);
         const first = recent[0] ?? samples[0];
         const last = samples[samples.length - 1];
         const dt = Math.max(1, last.t - first.t);
-        let vx = ((last.x - first.x) / dt) * 16; // px per ~tick
+        let vx = ((last.x - first.x) / dt) * 16;
         let vy = ((last.y - first.y) / dt) * 16;
         const sp = Math.hypot(vx, vy);
         if (sp > MAX_THROW) {
@@ -318,44 +303,27 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       if (draggedBody) pushSample();
     });
 
-    // Damp residual jitter: clamp angular velocity and zero out near-stationary
-    // bodies so they settle cleanly on the floor instead of buzzing.
+    // Settle damper — kills jitter so pills come to rest cleanly.
     Matter.Events.on(engine, "afterUpdate", () => {
       const now = performance.now();
       for (const b of bodiesRef.current) {
-        if ((mouseConstraint as any).body === b) continue;
-        if (Math.abs(b.angularVelocity) > 0.45) {
-          Matter.Body.setAngularVelocity(b, Math.sign(b.angularVelocity) * 0.45);
+        if ((mouseConstraint as unknown as { body?: Matter.Body }).body === b) continue;
+        if (Math.abs(b.angularVelocity) > 0.4) {
+          Matter.Body.setAngularVelocity(b, Math.sign(b.angularVelocity) * 0.4);
         }
-        // Settle damper for the first 1500ms after spawn so the cascade
-        // calms down rather than buzzing around.
-        const spawnAt = (b as any).__spawnAt as number | undefined;
+        const anyB = b as unknown as { __spawnAt?: number };
+        const spawnAt = anyB.__spawnAt;
         if (spawnAt && now - spawnAt < 1500) {
           Matter.Body.setVelocity(b, { x: b.velocity.x * 0.985, y: b.velocity.y * 0.985 });
         }
         const sp = Math.hypot(b.velocity.x, b.velocity.y);
-        if (sp < 0.08 && Math.abs(b.angularVelocity) < 0.03) {
+        if (sp < 0.07 && Math.abs(b.angularVelocity) < 0.025) {
           Matter.Body.setVelocity(b, { x: 0, y: 0 });
           Matter.Body.setAngularVelocity(b, 0);
         }
       }
     });
 
-    // Visual flash on hard collisions for tactile feedback (no physics cost).
-    Matter.Events.on(engine, "collisionStart", (event: any) => {
-      const now = performance.now();
-      for (const pair of event.pairs) {
-        const dvx = pair.bodyA.velocity.x - pair.bodyB.velocity.x;
-        const dvy = pair.bodyA.velocity.y - pair.bodyB.velocity.y;
-        const rel = Math.hypot(dvx, dvy);
-        if (rel > 6) {
-          (pair.bodyA as any).__flashUntil = now + 120;
-          (pair.bodyB as any).__flashUntil = now + 120;
-        }
-      }
-    });
-
-    // Hover cursor feedback.
     let lastHoverCheck = 0;
     const onMouseMove = (e: MouseEvent) => {
       if (draggedBody) return;
@@ -369,12 +337,19 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     };
     canvasEl.addEventListener("mousemove", onMouseMove);
 
-    // Fallback grab: only kick in for clicks that just barely missed a pill.
+    // Forgiving grab for clicks just outside a pill.
     const GRAB_RADIUS = 28;
     const onMouseDownPick = () => {
-      const current = (mouseConstraint as any).body as Matter.Body | null;
-      if (current) return;
-      const pos = (mouse as any).position as { x: number; y: number };
+      const mc = mouseConstraint as unknown as {
+        body: Matter.Body | null;
+        constraint: {
+          pointA: { x: number; y: number };
+          bodyB: Matter.Body;
+          pointB: { x: number; y: number };
+        };
+      };
+      if (mc.body) return;
+      const pos = (mouse as unknown as { position?: { x: number; y: number } }).position;
       if (!pos) return;
       const exact = Matter.Query.point(bodiesRef.current, pos)[0];
       if (exact) return;
@@ -396,15 +371,15 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
         const sin = Math.sin(-target.angle);
         const localX = dx * cos - dy * sin;
         const localY = dx * sin + dy * cos;
-        (mouseConstraint as any).body = target;
-        (mouseConstraint.constraint as any).pointA = { x: pos.x, y: pos.y };
-        (mouseConstraint.constraint as any).bodyB = target;
-        (mouseConstraint.constraint as any).pointB = { x: localX, y: localY };
+        mc.body = target;
+        mc.constraint.pointA = { x: pos.x, y: pos.y };
+        mc.constraint.bodyB = target;
+        mc.constraint.pointB = { x: localX, y: localY };
       }
     };
     Matter.Events.on(mouseConstraint, "mousedown", onMouseDownPick);
 
-    // ---- Scroll-driven gentle impulse ----
+    // Scroll-driven gentle nudge.
     let lastScrollY = window.scrollY;
     let pendingDelta = 0;
     let rafId = 0;
@@ -415,9 +390,9 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       pendingDelta = 0;
       if (Math.abs(delta) < 0.5) return;
       const cx = (render.options.width || width) / 2;
-      const nudge = -delta * 0.06;
+      const nudge = -delta * 0.05;
       for (const b of bodiesRef.current) {
-        if ((mouseConstraint as any).body === b) continue;
+        if ((mouseConstraint as unknown as { body?: Matter.Body }).body === b) continue;
         const v = b.velocity;
         let nvx = v.x;
         let nvy = v.y + nudge;
@@ -429,10 +404,7 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
         }
         Matter.Body.setVelocity(b, { x: nvx, y: nvy });
         const side = cx > 0 ? (b.position.x - cx) / cx : 0;
-        Matter.Body.setAngularVelocity(
-          b,
-          b.angularVelocity + delta * 0.0006 * side,
-        );
+        Matter.Body.setAngularVelocity(b, b.angularVelocity + delta * 0.0005 * side);
       }
     };
     const onScroll = () => {
@@ -443,8 +415,7 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     };
     window.addEventListener("scroll", onScroll, { passive: true });
 
-    // Touch arbitration: decide drag-vs-scroll on touchstart (not mid-move) so
-    // the browser can scroll natively when the touch starts on empty canvas.
+    // Touch arbitration — decide drag vs. scroll on touchstart.
     type TouchState = {
       startX: number;
       startY: number;
@@ -468,7 +439,6 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     };
 
     const onTouchStart = (e: TouchEvent) => {
-      // Always reset stale state from a missed touchend.
       touchState = null;
       if (e.touches.length !== 1) return;
       const t = e.touches[0];
@@ -477,8 +447,6 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       touchState = {
         startX: t.clientX,
         startY: t.clientY,
-        // If the touch did NOT land on a pill, decide scroll IMMEDIATELY so
-        // the browser handles vertical scrolling without any arbitration delay.
         decided: hit ? "none" : "scroll",
         bodyHit: hit,
       };
@@ -486,7 +454,6 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
 
     const onTouchMove = (e: TouchEvent) => {
       if (!touchState || e.touches.length !== 1) return;
-      // Already a scroll gesture — let the browser take over completely.
       if (touchState.decided === "scroll") return;
       const t = e.touches[0];
       const dx = t.clientX - touchState.startX;
@@ -496,35 +463,32 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
         const adx = Math.abs(dx);
         const ady = Math.abs(dy);
         if (adx < DRAG_THRESHOLD && ady < DRAG_THRESHOLD) return;
-        // Vertical-dominant gesture even on a pill = let user scroll.
         if (ady > adx * 1.2) {
           touchState.decided = "scroll";
           return;
         }
         touchState.decided = "drag";
         const pt = getCanvasPoint(t.clientX, t.clientY);
-        // CRITICAL: prime the mouse state BEFORE attaching the constraint so
-        // the soft constraint anchors at the current touch point, not at a
-        // stale mousedownPosition from a previous gesture (which caused pills
-        // to shoot off-screen upward).
-        (mouse as any).position = { x: pt.x, y: pt.y };
-        (mouse as any).mousedownPosition = { x: pt.x, y: pt.y };
-        (mouse as any).mouseupPosition = { x: pt.x, y: pt.y };
-        (mouse as any).button = 0;
-        // Stiffen constraint for touch only — prevents slingshot on mobile
-        // while preserving the weighty desktop feel.
-        (mouseConstraint.constraint as any).stiffness = TOUCH_STIFFNESS;
-        (mouseConstraint as any).body = touchState.bodyHit;
+        const mouseAny = mouse as unknown as {
+          position: { x: number; y: number };
+          mousedownPosition: { x: number; y: number };
+          mouseupPosition: { x: number; y: number };
+          button: number;
+        };
+        mouseAny.position = { x: pt.x, y: pt.y };
+        mouseAny.mousedownPosition = { x: pt.x, y: pt.y };
+        mouseAny.mouseupPosition = { x: pt.x, y: pt.y };
+        mouseAny.button = 0;
+        (mouseConstraint.constraint as unknown as { stiffness: number }).stiffness = TOUCH_STIFFNESS;
+        (mouseConstraint as unknown as { body: Matter.Body | null }).body = touchState.bodyHit;
         canvasEl.style.touchAction = "none";
       }
 
       if (touchState.decided === "drag") {
         e.preventDefault();
         const pt = getCanvasPoint(t.clientX, t.clientY);
-        (mouse as any).position = { x: pt.x, y: pt.y };
-        // Clamp dragged body's velocity each tick to prevent runaway energy
-        // accumulation in the constraint solver.
-        const body = (mouseConstraint as any).body as Matter.Body | null;
+        (mouse as unknown as { position: { x: number; y: number } }).position = { x: pt.x, y: pt.y };
+        const body = (mouseConstraint as unknown as { body: Matter.Body | null }).body;
         if (body) {
           const sp = Math.hypot(body.velocity.x, body.velocity.y);
           if (sp > MAX_DRAG_VEL) {
@@ -537,9 +501,9 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
 
     const onTouchEnd = () => {
       if (touchState && touchState.decided === "drag") {
-        (mouseConstraint as any).body = null;
-        (mouse as any).button = -1;
-        (mouseConstraint.constraint as any).stiffness = NORMAL_STIFFNESS;
+        (mouseConstraint as unknown as { body: Matter.Body | null }).body = null;
+        (mouse as unknown as { button: number }).button = -1;
+        (mouseConstraint.constraint as unknown as { stiffness: number }).stiffness = NORMAL_STIFFNESS;
       }
       canvasEl.style.touchAction = "pan-y";
       touchState = null;
@@ -551,48 +515,50 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     canvasEl.addEventListener("touchcancel", onTouchEnd, { passive: true });
 
     Render.run(render);
-    const runner = Runner.create({ delta: 1000 / 60, isFixed: true } as any);
+    const runner = Runner.create({ delta: 1000 / 60, isFixed: true } as unknown as Matter.IRunnerOptions);
     Runner.run(runner, engine);
 
+    // Custom render — flat Kitsys pills (solid color, no gradient/border).
     Matter.Events.on(render, "afterRender", () => {
       const c = render.context;
       c.save();
       c.font = `600 ${FONT_SIZE}px Inter, system-ui, sans-serif`;
       c.textAlign = "center";
       c.textBaseline = "middle";
-      const now = performance.now();
-      // Contact shadows for pills resting near the floor.
+
+      // Soft contact shadow when resting near the floor.
       bodiesRef.current.forEach((b) => {
-        const anyB = b as any;
-        if (!anyB.__h) return;
-        const distToFloor = h - (b.position.y + (anyB.__h as number) / 2);
+        const anyB = b as unknown as { __h?: number; __w?: number };
+        if (!anyB.__h || !anyB.__w) return;
+        const distToFloor = h - (b.position.y + anyB.__h / 2);
         if (distToFloor < 30 && distToFloor > -2) {
           const t = 1 - Math.max(0, Math.min(1, distToFloor / 30));
-          const shadowW = (anyB.__w as number) * 0.55;
+          const shadowW = anyB.__w * 0.5;
           c.save();
-          c.fillStyle = `rgba(15, 23, 42, ${0.08 * t})`;
+          c.fillStyle = `rgba(15, 23, 42, ${0.07 * t})`;
           c.beginPath();
           c.ellipse(b.position.x, h - 1, shadowW, 4, 0, 0, Math.PI * 2);
           c.fill();
           c.restore();
         }
       });
+
+      // Pills — flat fill, just like Kitsys.
       bodiesRef.current.forEach((b) => {
-        const anyB = b as any;
-        if (!anyB.__label) return;
-        const w = anyB.__w as number;
-        const hh = anyB.__h as number;
-        const flashing = anyB.__flashUntil && now < anyB.__flashUntil;
-        const bg = flashing ? shadeHex(anyB.__bg as string, 0.06) : (anyB.__bg as string);
+        const anyB = b as unknown as {
+          __label?: string;
+          __w?: number;
+          __h?: number;
+          __bg?: string;
+          __fg?: string;
+        };
+        if (!anyB.__label || !anyB.__w || !anyB.__h || !anyB.__bg || !anyB.__fg) return;
+        const w = anyB.__w;
+        const hh = anyB.__h;
         c.save();
         c.translate(b.position.x, b.position.y);
         c.rotate(b.angle);
-        // Gradient highlight for a 3D chip feel — top lighter, bottom darker.
-        const grad = c.createLinearGradient(0, -hh / 2, 0, hh / 2);
-        grad.addColorStop(0, shadeHex(bg, 0.18));
-        grad.addColorStop(0.55, bg);
-        grad.addColorStop(1, shadeHex(bg, -0.18));
-        c.fillStyle = grad;
+        c.fillStyle = anyB.__bg;
         const r = hh / 2;
         c.beginPath();
         c.moveTo(-w / 2 + r, -hh / 2);
@@ -602,19 +568,7 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
         c.arc(-w / 2 + r, 0, r, Math.PI / 2, -Math.PI / 2);
         c.closePath();
         c.fill();
-        // Subtle inner top highlight.
-        c.fillStyle = "rgba(255,255,255,0.08)";
-        c.beginPath();
-        c.moveTo(-w / 2 + r, -hh / 2 + 1);
-        c.lineTo(w / 2 - r, -hh / 2 + 1);
-        c.arc(w / 2 - r, -hh / 2 + r * 0.6, r * 0.6, -Math.PI / 2, Math.PI / 2);
-        c.lineTo(-w / 2 + r, -hh / 2 + r * 1.2);
-        c.arc(-w / 2 + r, -hh / 2 + r * 0.6, r * 0.6, Math.PI / 2, -Math.PI / 2);
-        c.closePath();
-        c.fill();
-
         c.fillStyle = anyB.__fg;
-        c.font = `600 ${FONT_SIZE}px Inter, system-ui, sans-serif`;
         c.fillText(anyB.__label, 0, 1);
         c.restore();
       });
