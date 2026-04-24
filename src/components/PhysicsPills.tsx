@@ -678,7 +678,9 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       clearSpawnTimers();
       window.removeEventListener("scroll", onScroll);
-      if (isCoarsePointer) window.removeEventListener("deviceorientation", onOrient);
+      // (deviceorientation listener was removed — pills no longer follow tilt)
+      void isCoarsePointer;
+      void onOrient;
       Matter.Events.off(engine, "beforeUpdate", onBeforeUpdate);
       canvas.removeEventListener("pointerdown", onPointerDown);
       canvas.removeEventListener("pointermove", onPointerMove);
