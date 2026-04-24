@@ -819,9 +819,16 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       clearSpawnTimers();
       window.removeEventListener("scroll", onScroll);
-      // (deviceorientation listener was removed — pills no longer follow tilt)
-      void isCoarsePointer;
-      void onOrient;
+      // Detach device sensors (if attached) and the pointer fallback.
+      if (sensorAttachRef.current) {
+        // sensorAttachRef stores either an attach fn (never called) or the
+        // detach fn after attachment. We only call it if it's a detacher;
+        // recognised by the fact that listeners were added.
+      }
+      if (supportsOrientation) window.removeEventListener("deviceorientation", onOrient);
+      if (supportsMotion) window.removeEventListener("devicemotion", onMotion);
+      wrap.removeEventListener("mousemove", onWrapMouseMove);
+      Matter.Events.off(engine, "beforeUpdate", onSensorTick);
       Matter.Events.off(engine, "beforeUpdate", onBeforeUpdate);
       canvas.removeEventListener("pointerdown", onPointerDown);
       canvas.removeEventListener("pointermove", onPointerMove);
