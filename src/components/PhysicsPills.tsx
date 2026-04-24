@@ -579,6 +579,23 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     };
     window.addEventListener("scroll", onScroll, { passive: true });
 
+    // Device motion / orientation tilt — pills react to phone tilt. Subtle
+    // gravity bias on coarse pointers (touch devices) so the field feels
+    // physically alive when the user moves the device.
+    let baseGravityY = engine.gravity.y;
+    const onOrient = (e: DeviceOrientationEvent) => {
+      if (!visibleRef.current || reducedMotionRef.current) return;
+      // gamma: left/right tilt (-90..90), beta: front/back (-180..180)
+      const gx = (e.gamma ?? 0) / 45; // normalize ~[-2..2]
+      const gy = (e.beta ?? 0) / 90; // normalize ~[-2..2]
+      engine.gravity.x = Math.max(-1.2, Math.min(1.2, gx)) * 0.6;
+      engine.gravity.y = baseGravityY + Math.max(-0.5, Math.min(0.5, gy - 0.5)) * 0.4;
+    };
+    const isCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
+    if (isCoarsePointer && typeof window.DeviceOrientationEvent !== "undefined") {
+      window.addEventListener("deviceorientation", onOrient, { passive: true });
+    }
+
     try {
       if (!sessionStorage.getItem("pp:hint:v1")) {
         setShowHint(true);
@@ -594,6 +611,7 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       clearSpawnTimers();
       window.removeEventListener("scroll", onScroll);
+      if (isCoarsePointer) window.removeEventListener("deviceorientation", onOrient);
       canvas.removeEventListener("pointerdown", onPointerDown);
       canvas.removeEventListener("pointermove", onPointerMove);
       canvas.removeEventListener("pointerup", finishPointer);
