@@ -12,6 +12,7 @@ import { GithubActivitySection } from "@/components/GithubActivitySection";
 import { SectionBand } from "@/components/SectionBand";
 import { useSiteData } from "@/components/SiteDataProvider";
 import { useLang } from "@/components/LanguageProvider";
+import { ScrollProgress } from "@/components/motion-primitives";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -40,37 +41,38 @@ function Index() {
   const tagsAr = data.personal.ar.taglines;
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <ScrollProgress />
       <Navbar />
       {/* Hero keeps default background to anchor the page */}
       <Hero />
       <Marquee items={tagsEn} itemsAr={tagsAr} key={lang} />
 
-      {/* Alternating bands: light → dark → primary → light → dark → primary */}
-      <SectionBand variant="light">
+      {/* Curated rhythm: each section has its own visual character */}
+      <SectionBand variant="light" pattern="grid" divider>
         <AboutSection />
       </SectionBand>
 
-      <SectionBand variant="dark">
+      <SectionBand variant="dark" pattern="mesh" divider>
         <SkillsSection />
       </SectionBand>
 
-      <SectionBand variant="primary">
+      <SectionBand variant="primary" pattern="grid-fine" divider>
         <ExperienceSection />
       </SectionBand>
 
-      <SectionBand variant="light">
+      <SectionBand variant="light" pattern="grid-fine" divider>
         <ProjectsSection />
       </SectionBand>
 
-      <SectionBand variant="dark">
+      <SectionBand variant="dark" pattern="mesh" divider>
         <AchievementsSection />
       </SectionBand>
 
-      <SectionBand variant="primary">
+      <SectionBand variant="primary" pattern="grid" divider>
         <GithubActivitySection />
       </SectionBand>
 
-      <SectionBand variant="light">
+      <SectionBand variant="light" pattern="grid" divider>
         <ContactSection />
       </SectionBand>
     </div>

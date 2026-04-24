@@ -17,24 +17,48 @@ interface Props {
   children: ReactNode;
   className?: string;
   id?: string;
+  /** Show subtle grid pattern background */
+  pattern?: "grid" | "grid-fine" | "mesh" | "none";
+  /** Show top hairline divider */
+  divider?: boolean;
 }
 
 const variantClasses: Record<BandVariant, string> = {
-  // "light" = pure background in light mode, pure foreground inverted bg in dark.
   light: "bg-band-light text-band-light-foreground",
-  // "dark" = inverted of light: dark in light mode, light in dark mode.
   dark: "bg-band-dark text-band-dark-foreground",
-  // "primary" = the brand color, identical across themes (slightly tuned).
   primary: "bg-band-primary text-band-primary-foreground",
 };
 
-export function SectionBand({ variant, children, className = "", id }: Props) {
+const patternClasses: Record<NonNullable<Props["pattern"]>, string> = {
+  grid: "grid-bg",
+  "grid-fine": "grid-bg-fine",
+  mesh: "mesh-bg",
+  none: "",
+};
+
+export function SectionBand({
+  variant,
+  children,
+  className = "",
+  id,
+  pattern = "none",
+  divider = false,
+}: Props) {
   return (
     <div
       id={id}
       data-band={variant}
-      className={`relative ${variantClasses[variant]} ${className}`}
+      className={`relative isolate noise-overlay ${variantClasses[variant]} ${className}`}
     >
+      {divider && (
+        <div className="absolute top-0 left-0 right-0 section-divider opacity-60" />
+      )}
+      {pattern !== "none" && (
+        <div
+          aria-hidden
+          className={`pointer-events-none absolute inset-0 -z-[1] ${patternClasses[pattern]}`}
+        />
+      )}
       {children}
     </div>
   );

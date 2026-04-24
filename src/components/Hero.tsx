@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowDown, Github, Mail } from "lucide-react";
+import { ArrowDown, Github, Mail, Sparkles } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { MagneticButton } from "./MagneticButton";
 import faresImg from "@/assets/fares.jpg";
@@ -22,56 +22,59 @@ export function Hero() {
         : ["Engineer.", "Builder.", "Bilingual."];
 
   return (
-    <section id="top" className="relative min-h-screen pt-32 pb-20 overflow-hidden">
+    <section id="top" className="relative min-h-screen pt-32 pb-24 overflow-hidden">
       <DotPattern className="absolute inset-0 -z-10">
         <div className="h-full w-full" />
       </DotPattern>
-      <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute top-20 -left-20 h-[500px] w-[500px] rounded-full bg-[oklch(0.85_0.1_240)] opacity-50 blur-3xl animate-blob hero-blob" />
-        <div className="absolute bottom-0 right-0 h-[420px] w-[420px] rounded-full bg-[oklch(0.78_0.12_270)] opacity-40 blur-3xl animate-blob hero-blob" style={{ animationDelay: "4s" }} />
-        <div className="absolute top-1/3 left-1/2 h-[300px] w-[300px] rounded-full bg-[oklch(0.92_0.08_220)] opacity-50 blur-3xl animate-blob hero-blob" style={{ animationDelay: "8s" }} />
+      {/* Refined mesh-gradient atmosphere */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 mesh-bg opacity-90" />
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute top-20 -left-20 h-[500px] w-[500px] rounded-full bg-primary/10 blur-3xl animate-blob hero-blob" />
+        <div className="absolute bottom-0 right-0 h-[420px] w-[420px] rounded-full bg-primary/15 blur-3xl animate-blob hero-blob" style={{ animationDelay: "4s" }} />
       </div>
+      {/* Subtle grid */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 grid-bg opacity-50" />
 
       <div className="container mx-auto px-6 max-w-7xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.2 }}
-          className="flex items-center gap-3 mb-8"
+          className="inline-flex items-center gap-2.5 mb-10 px-3.5 py-1.5 rounded-full border border-border/60 bg-background/40 backdrop-blur-md"
         >
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
           </span>
-          <span className="text-sm text-muted-foreground tracking-wide">
+          <span className="text-xs sm:text-sm text-muted-foreground tracking-wide font-medium">
             {t("Available for new opportunities", "متاح لفرص جديدة")}
           </span>
         </motion.div>
 
-        <h1 className="font-display text-[clamp(2.8rem,9vw,8.5rem)] leading-[0.92] tracking-[-0.04em]">
+        <h1 className="font-display text-[clamp(2.8rem,9vw,8.5rem)] leading-[0.92] tracking-[-0.045em]">
           {heroWords.map((word, i) => (
             <motion.span
               key={word}
               initial={{ opacity: 0, y: 60 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.9, delay: 0.3 + i * 0.12, ease: [0.22, 1, 0.36, 1] }}
-              className={`block ${i === 1 ? "italic font-normal text-[oklch(0.42_0.2_255)]" : ""}`}
+              className={`block ${i === 1 ? "italic font-normal gradient-text-primary" : ""}`}
             >
               {word}
             </motion.span>
           ))}
         </h1>
 
-        <div className="mt-12 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-10">
+        <div className="mt-14 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-12">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, delay: 0.7 }}
-            className="max-w-md"
+            className="max-w-lg"
           >
-            <p className="text-base text-muted-foreground leading-relaxed">
+            <p className="text-base sm:text-lg text-muted-foreground leading-relaxed">
               {t("Hi — I'm ", "مرحباً — أنا ")}
-              <span className="text-foreground font-medium">{p.name}</span>
+              <span className="text-foreground font-semibold">{p.name}</span>
               {t(", ", "، ")}
               {loc.bio}
             </p>
@@ -95,27 +98,39 @@ export function Hero() {
             transition={{ duration: 1, delay: 0.8 }}
             className="relative"
           >
+            {/* Halo ring */}
+            <div aria-hidden className="absolute -inset-4 rounded-full bg-primary/15 blur-2xl" />
             <div
               data-cursor="view"
               data-cursor-label={p.name}
-              className="relative h-32 w-32 sm:h-40 sm:w-40 rounded-full overflow-hidden ring-1 ring-border soft-shadow animate-float-slow"
+              className="relative h-36 w-36 sm:h-44 sm:w-44 rounded-full overflow-hidden ring-1 ring-border/60 elevated-shadow animate-float-slow"
             >
               <img src={faresImg} alt={p.name} className="h-full w-full object-cover" />
+              <div className="absolute inset-0 rounded-full ring-1 ring-inset ring-white/10" />
             </div>
-            <div className="absolute -bottom-2 -right-2 bg-foreground text-background text-xs px-3 py-1.5 rounded-full">
+            <div className="absolute -bottom-2 -right-2 bg-foreground text-background text-xs px-3 py-1.5 rounded-full font-medium tracking-wide soft-shadow">
               {loc.location}
             </div>
           </motion.div>
         </div>
 
+        {/* Bottom strip — credibility row */}
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 1.4 }}
-          className="mt-20 flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground"
+          className="mt-20 pt-8 border-t border-border/40 flex items-center justify-between gap-6 flex-wrap"
         >
-          <ArrowDown className="h-3.5 w-3.5 animate-bounce" />
-          {t("Scroll to explore", "مرر للاستكشاف")}
+          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            <ArrowDown className="h-3.5 w-3.5 animate-bounce" />
+            {t("Scroll to explore", "مرر للاستكشاف")}
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <span className="tracking-wide">
+              {t("Engineering · Systems · Product", "هندسة · أنظمة · منتج")}
+            </span>
+          </div>
         </motion.div>
       </div>
     </section>
