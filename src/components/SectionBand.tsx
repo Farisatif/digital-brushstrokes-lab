@@ -10,7 +10,7 @@ import type { ReactNode } from "react";
  * This gives the homepage a deliberate, magazine-style rhythm of contrasting
  * sections while keeping the design system cohesive.
  */
-export type BandVariant = "light" | "dark" | "primary";
+export type BandVariant = "light" | "dark" | "primary" | "surface" | "soft";
 
 interface Props {
   variant: BandVariant;
@@ -18,7 +18,7 @@ interface Props {
   className?: string;
   id?: string;
   /** Show subtle grid pattern background */
-  pattern?: "grid" | "grid-fine" | "mesh" | "none";
+  pattern?: "grid" | "grid-fine" | "grid-dots" | "mesh" | "aurora" | "none";
   /** Show top hairline divider */
   divider?: boolean;
 }
@@ -27,12 +27,16 @@ const variantClasses: Record<BandVariant, string> = {
   light: "bg-band-light text-band-light-foreground",
   dark: "bg-band-dark text-band-dark-foreground",
   primary: "bg-band-primary text-band-primary-foreground",
+  surface: "bg-band-surface text-band-surface-foreground",
+  soft: "bg-band-soft text-band-soft-foreground",
 };
 
 const patternClasses: Record<NonNullable<Props["pattern"]>, string> = {
   grid: "grid-bg",
   "grid-fine": "grid-bg-fine",
+  "grid-dots": "grid-bg-dots",
   mesh: "mesh-bg",
+  aurora: "aurora-bg",
   none: "",
 };
 
