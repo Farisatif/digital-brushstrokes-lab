@@ -5,6 +5,7 @@ import { Reveal } from "./Reveal";
 import { useSiteData } from "./SiteDataProvider";
 import { useLang } from "./LanguageProvider";
 import { getGithubBundle, type GithubBundle } from "@/utils/github.functions";
+import { GlowDots } from "./GlowDots";
 
 const CELL = 12; // px
 const GAP = 4; // px
@@ -193,6 +194,18 @@ export function GithubActivitySection() {
 
   return (
     <section id="github" className="relative py-24 sm:py-32 overflow-hidden">
+      {/* Interactive glowing dots backdrop — reacts to cursor/touch
+          across the entire section. pointer-events:none so it never blocks
+          card interactions. Auto-themes via currentColor. */}
+      <div className="pointer-events-none absolute inset-0 -z-0 opacity-[0.55]">
+        <GlowDots
+          asBackground
+          height="100%"
+          dotColor="currentColor"
+          glowColor="oklch(0.62 0.24 268)"
+          spacing={32}
+        />
+      </div>
       <div className="container mx-auto px-6 max-w-7xl relative z-10">
         <Reveal>
           <div className="flex items-end justify-between flex-wrap gap-6 mb-10 sm:mb-14">
