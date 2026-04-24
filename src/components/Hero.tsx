@@ -23,24 +23,26 @@ export function Hero() {
 
   return (
     <section id="top" className="relative min-h-screen pt-32 pb-24 overflow-hidden">
-      <DotPattern className="absolute inset-0 -z-10">
+      {/* Toned-down dot pattern for subtle texture */}
+      <DotPattern className="absolute inset-0 -z-10 opacity-40">
         <div className="h-full w-full" />
       </DotPattern>
-      {/* Refined mesh-gradient atmosphere */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 mesh-bg opacity-90" />
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute top-20 -left-20 h-[500px] w-[500px] rounded-full bg-primary/10 blur-3xl animate-blob hero-blob" />
-        <div className="absolute bottom-0 right-0 h-[420px] w-[420px] rounded-full bg-primary/15 blur-3xl animate-blob hero-blob" style={{ animationDelay: "4s" }} />
-      </div>
-      {/* Subtle grid */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 grid-bg opacity-50" />
+      {/* Soft mesh atmosphere — much dimmer so content stays primary */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 mesh-bg opacity-30 dark:opacity-40" />
+      {/* Single calm accent halo, off to one side */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-32 -right-32 h-[420px] w-[420px] rounded-full bg-primary/[0.07] dark:bg-primary/15 blur-3xl"
+      />
+      {/* Faint grid for depth, masked to fade at edges */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 grid-bg opacity-25 dark:opacity-30" />
 
       <div className="container mx-auto px-6 max-w-7xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.2 }}
-          className="inline-flex items-center gap-2.5 mb-10 px-3.5 py-1.5 rounded-full border border-border/60 bg-background/40 backdrop-blur-md"
+          className="inline-flex items-center gap-2.5 mb-10 px-3.5 py-1.5 rounded-full border border-border bg-background/80 backdrop-blur-md soft-shadow"
         >
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -58,7 +60,7 @@ export function Hero() {
               initial={{ opacity: 0, y: 60 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.9, delay: 0.3 + i * 0.12, ease: [0.22, 1, 0.36, 1] }}
-              className={`block ${i === 1 ? "italic font-normal gradient-text-primary" : ""}`}
+          className={`block ${i === 1 ? "italic font-normal text-primary" : ""}`}
             >
               {word}
             </motion.span>
@@ -72,7 +74,7 @@ export function Hero() {
             transition={{ duration: 0.9, delay: 0.7 }}
             className="max-w-lg"
           >
-            <p className="text-base sm:text-lg text-muted-foreground leading-relaxed">
+            <p className="text-base sm:text-lg text-foreground/75 leading-relaxed">
               {t("Hi — I'm ", "مرحباً — أنا ")}
               <span className="text-foreground font-semibold">{p.name}</span>
               {t(", ", "، ")}
@@ -98,12 +100,12 @@ export function Hero() {
             transition={{ duration: 1, delay: 0.8 }}
             className="relative"
           >
-            {/* Halo ring */}
-            <div aria-hidden className="absolute -inset-4 rounded-full bg-primary/15 blur-2xl" />
+            {/* Subtle halo ring — dimmer in light, slightly stronger in dark */}
+            <div aria-hidden className="absolute -inset-3 rounded-full bg-primary/[0.08] dark:bg-primary/20 blur-2xl" />
             <div
               data-cursor="view"
               data-cursor-label={p.name}
-              className="relative h-36 w-36 sm:h-44 sm:w-44 rounded-full overflow-hidden ring-1 ring-border/60 elevated-shadow animate-float-slow"
+              className="relative h-36 w-36 sm:h-44 sm:w-44 rounded-full overflow-hidden ring-2 ring-border elevated-shadow animate-float-slow"
             >
               <img src={faresImg} alt={p.name} className="h-full w-full object-cover" />
               <div className="absolute inset-0 rounded-full ring-1 ring-inset ring-white/10" />

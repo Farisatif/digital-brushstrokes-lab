@@ -1,6 +1,21 @@
 import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from "react";
 import Matter from "matter-js";
 
+/**
+ * PhysicsPills — KitSys-faithful falling pills field.
+ *
+ * Design contract:
+ *  - Pills fall in only when the section enters the viewport.
+ *  - Page scroll is NEVER blocked. The canvas only captures pointer events
+ *    that land directly on a pill (or within a small forgiving radius).
+ *  - Drag is mouse-only on desktop and pointer-only on touch — no custom
+ *    scroll arbitration, no preventDefault on touchmove unless a pill is
+ *    actively being held.
+ *  - When released, pills get a natural fling proportional to recent pointer
+ *    velocity, capped sensibly so they never fly off-screen.
+ *  - Top wall + cleanup sweep guarantee no pill can disappear permanently.
+ */
+
 interface PillData {
   label: string;
   variant: number;
@@ -17,24 +32,22 @@ export interface PhysicsPillsHandle {
 }
 
 /**
- * Kitsys-faithful palette: soft pastels + bold blue accents on neutral fg.
- * Mirrors the original "fallbox" v1..v12 styling — flat solid pills, no
- * gradients, no borders, no shadows beyond a soft contact ellipse.
+ * Theme-aware palette: pastels + brand accents that work on both light &
+ * dark backgrounds without hardcoding to a section color.
  */
 const PALETTE: { bg: string; fg: string }[] = [
-  // Balanced for dark backgrounds: neutrals + warm + a couple of brand accents.
   { bg: "#F1F5F9", fg: "#0F172A" }, // porcelain
-  { bg: "#1E293B", fg: "#F1F5F9" }, // slate-800
-  { bg: "#E2E8F0", fg: "#1E293B" }, // slate-200
-  { bg: "#0F172A", fg: "#F1F5F9" }, // near-black
-  { bg: "#FCD9B6", fg: "#3B2A14" }, // warm peach
+  { bg: "#1E293B", fg: "#F8FAFC" }, // slate-800
+  { bg: "#DBE3F1", fg: "#1E2A4A" }, // soft blue tint
+  { bg: "#0F172A", fg: "#F8FAFC" }, // near-black
+  { bg: "#FCE7C8", fg: "#3B2A14" }, // warm peach
   { bg: "#4338CA", fg: "#FFFFFF" }, // indigo accent
   { bg: "#FAFAF9", fg: "#27272A" }, // off-white
-  { bg: "#334155", fg: "#F8FAFC" }, // slate-700
-  { bg: "#C4B5FD", fg: "#2E1065" }, // soft violet
-  { bg: "#1D4ED8", fg: "#FFFFFF" }, // brand blue (used sparingly)
+  { bg: "#475569", fg: "#F8FAFC" }, // slate-600
+  { bg: "#C7D2FE", fg: "#1E2A6B" }, // periwinkle
+  { bg: "#1D4ED8", fg: "#FFFFFF" }, // brand blue
   { bg: "#E7E5E4", fg: "#1C1917" }, // stone
-  { bg: "#A7F3D0", fg: "#064E3B" }, // mint accent
+  { bg: "#A7F3D0", fg: "#064E3B" }, // mint
 ];
 
 export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function PhysicsPills(
@@ -51,25 +64,24 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
   const [started, setStarted] = useState(false);
 
   useImperativeHandle(ref, () => ({
-    replay: () => {
-      if (spawnFnRef.current) spawnFnRef.current();
-    },
+    replay: () => spawnFnRef.current?.(),
   }));
 
-  // Trigger only when the section enters the viewport — saves CPU above the fold.
+  // Defer simulation start until the section is on/near the screen.
   useEffect(() => {
     if (!sceneRef.current) return;
     const el = sceneRef.current;
     const io = new IntersectionObserver(
       (entries) => {
-        entries.forEach((e) => {
+        for (const e of entries) {
           if (e.isIntersecting) {
             setStarted(true);
             io.disconnect();
+            break;
           }
-        });
+        }
       },
-      { rootMargin: "-8% 0px" },
+      { rootMargin: "-5% 0px" },
     );
     io.observe(el);
     return () => io.disconnect();
@@ -78,100 +90,95 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
   useEffect(() => {
     if (!started || !sceneRef.current || !canvasRef.current) return;
     const container = sceneRef.current;
+    const canvas = canvasRef.current;
     const width = container.clientWidth;
     const h = height;
 
-    const { Engine, Render, Runner, Bodies, Composite, Mouse, MouseConstraint } = Matter;
+    const { Engine, Bodies, Composite, Body, Events, Query } = Matter;
 
+    // ---------------- Engine ----------------
     const engine = Engine.create({
-      // Slightly heavier gravity for a Kitsys-style weighty drop.
-      gravity: { x: 0, y: 1, scale: 0.0017 },
-      positionIterations: 14,
-      velocityIterations: 12,
-      constraintIterations: 4,
+      gravity: { x: 0, y: 1, scale: 0.0016 },
+      positionIterations: 12,
+      velocityIterations: 10,
+      constraintIterations: 3,
     });
     engineRef.current = engine;
     worldRef.current = engine.world;
 
-    const render = Render.create({
-      canvas: canvasRef.current,
-      engine,
-      options: {
-        width,
-        height: h,
-        wireframes: false,
-        background: "transparent",
-        pixelRatio: window.devicePixelRatio || 1,
-      },
-    });
-
-    const ctx = canvasRef.current.getContext("2d")!;
-
-    // Sizing — Kitsys-style chunky pills with generous padding.
-    const isMobile = width < 640;
-    const FONT_SIZE = isMobile ? 17 : 19;
-    const PAD_X = isMobile ? 22 : 26;
-    const PILL_H = isMobile ? 44 : 52;
-    const MIN_W = 90;
-
-    ctx.font = `600 ${FONT_SIZE}px Inter, system-ui, sans-serif`;
-
-    const measured = pills.map((p) => {
-      const textW = ctx.measureText(p.label).width;
-      return Math.max(MIN_W, textW + PAD_X * 2);
-    });
-
-    // Walls flush with visible edges.
-    const WALL_T = 60;
+    // ---------------- Walls ----------------
+    // Floor + sides at the visible edges. Top wall well above so falling pills
+    // can spawn off-screen but no body can ever exit upward after spawn.
+    const WALL_T = 80;
     const wallOpts = {
       isStatic: true,
-      friction: 0.04,
-      frictionStatic: 0.4,
-      restitution: 0.02,
+      friction: 0.05,
+      frictionStatic: 0.5,
+      restitution: 0.0,
       slop: 0.04,
       render: { visible: false },
     };
-    const floor = Bodies.rectangle(width / 2, h + WALL_T / 2, width * 2, WALL_T, wallOpts);
-    const leftWall = Bodies.rectangle(-WALL_T / 2, h / 2, WALL_T, h * 2, wallOpts);
-    const rightWall = Bodies.rectangle(width + WALL_T / 2, h / 2, WALL_T, h * 2, wallOpts);
-    const topWall = Bodies.rectangle(width / 2, -WALL_T / 2 - 200, width * 2, WALL_T, wallOpts);
-    Composite.add(engine.world, [floor, leftWall, rightWall, topWall]);
+    const floor = Bodies.rectangle(width / 2, h + WALL_T / 2, width * 4, WALL_T, wallOpts);
+    const leftWall = Bodies.rectangle(-WALL_T / 2, h / 2, WALL_T, h * 4, wallOpts);
+    const rightWall = Bodies.rectangle(width + WALL_T / 2, h / 2, WALL_T, h * 4, wallOpts);
+    // Top ceiling far above to allow spawn drop, but catches anything launched up.
+    const ceiling = Bodies.rectangle(width / 2, -800 - WALL_T / 2, width * 4, WALL_T, wallOpts);
+    Composite.add(engine.world, [floor, leftWall, rightWall, ceiling]);
 
+    // ---------------- Sizing ----------------
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const isMobile = width < 640;
+    const FONT_SIZE = isMobile ? 16 : 19;
+    const PAD_X = isMobile ? 20 : 26;
+    const PILL_H = isMobile ? 42 : 50;
+    const MIN_W = 84;
+
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(h * dpr);
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${h}px`;
+    const ctx = canvas.getContext("2d")!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.font = `600 ${FONT_SIZE}px Inter, system-ui, sans-serif`;
+
+    const measured = pills.map((p) =>
+      Math.max(MIN_W, ctx.measureText(p.label).width + PAD_X * 2),
+    );
+
+    // ---------------- Body factory ----------------
     const makePillBody = (i: number): Matter.Body => {
       const p = pills[i];
       const palette = PALETTE[(p.variant - 1 + PALETTE.length) % PALETTE.length];
       const w = measured[i];
-      const hh = PILL_H;
-      const margin = w / 2 + 10;
+      const margin = w / 2 + 12;
       const usable = Math.max(1, width - margin * 2);
       const phi = 0.61803398875;
       const t = (i * phi) % 1;
-      const x = margin + t * usable + (Math.random() - 0.5) * 14;
-      const y = -hh - 40 - (i % 4) * 110 - Math.random() * 90;
-      const body = Bodies.rectangle(x, y, w, hh, {
-        chamfer: { radius: hh / 2 },
-        // Lower restitution + higher friction = Kitsys dead-weight settle.
-        restitution: 0.05,
-        friction: 0.32,
+      const x = margin + t * usable + (Math.random() - 0.5) * 16;
+      // Stagger spawn Y above the canvas so cascade looks natural.
+      const y = -PILL_H - 50 - (i % 4) * 90 - Math.random() * 60;
+      const body = Bodies.rectangle(x, y, w, PILL_H, {
+        chamfer: { radius: PILL_H / 2 },
+        restitution: 0.04,
+        friction: 0.35,
         frictionStatic: 0.7,
-        frictionAir: 0.014,
+        frictionAir: 0.012,
         density: 0.002,
-        angle: (Math.random() - 0.5) * 0.5,
+        angle: (Math.random() - 0.5) * 0.4,
         slop: 0.04,
         render: { fillStyle: "transparent", strokeStyle: "transparent", lineWidth: 0 },
       });
-      Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.05);
-      Matter.Body.setVelocity(body, { x: (Math.random() - 0.5) * 0.7, y: 0 });
-      const anyB = body as unknown as Record<string, unknown>;
-      anyB.__label = p.label;
-      anyB.__fg = palette.fg;
-      anyB.__bg = palette.bg;
-      anyB.__w = w;
-      anyB.__h = hh;
-      anyB.__spawnAt = performance.now();
+      Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.04);
+      const meta = body as unknown as Record<string, unknown>;
+      meta.__label = p.label;
+      meta.__bg = palette.bg;
+      meta.__fg = palette.fg;
+      meta.__w = w;
+      meta.__h = PILL_H;
       return body;
     };
 
+    // ---------------- Spawn cascade ----------------
     const clearTimers = () => {
       spawnTimersRef.current.forEach((id) => window.clearTimeout(id));
       spawnTimersRef.current = [];
@@ -183,9 +190,8 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
         bodiesRef.current.forEach((b) => Composite.remove(worldRef.current!, b));
       }
       bodiesRef.current = [];
-
       pills.forEach((_, i) => {
-        const delay = 220 + i * (95 + Math.random() * 55);
+        const delay = 180 + i * (90 + Math.random() * 50);
         const id = window.setTimeout(() => {
           if (!worldRef.current) return;
           const body = makePillBody(i);
@@ -199,431 +205,287 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     spawnFnRef.current = spawnAll;
     spawnAll();
 
+    // Periodic safety sweep — resurrect any escaped body.
     const cleanupId = window.setInterval(() => {
       if (!worldRef.current) return;
-      const toRemove: Matter.Body[] = [];
       for (const b of bodiesRef.current) {
-        const x = b.position.x;
-        const y = b.position.y;
-        if (y > h + 200 || y < -400 || x < -150 || x > width + 150) {
-          toRemove.push(b);
+        const { x, y } = b.position;
+        // If a body has escaped (shouldn't happen with walls, but be safe),
+        // teleport it back to the top so the user never sees a missing pill.
+        if (y > h + 400 || y < -1500 || x < -300 || x > width + 300) {
+          Body.setPosition(b, { x: width / 2, y: -PILL_H });
+          Body.setVelocity(b, { x: 0, y: 0 });
+          Body.setAngularVelocity(b, 0);
         }
       }
-      if (toRemove.length) {
-        toRemove.forEach((b) => Composite.remove(worldRef.current!, b));
-        bodiesRef.current = bodiesRef.current.filter((b) => !toRemove.includes(b));
-      }
-    }, 500);
+    }, 800);
 
-    // ---- Mouse / touch ----
-    const canvasEl = canvasRef.current;
-    const mouse = Mouse.create(canvasEl);
-    const m = mouse as unknown as {
-      element?: HTMLElement;
-      mousewheel?: EventListener;
-      touchmove?: EventListener;
-      touchstart?: EventListener;
-      touchend?: EventListener;
-    };
-    if (m.element && m.mousewheel) m.element.removeEventListener("wheel", m.mousewheel);
-    if (m.element && m.touchmove) m.element.removeEventListener("touchmove", m.touchmove);
-    if (m.element && m.touchstart) m.element.removeEventListener("touchstart", m.touchstart);
-    if (m.element && m.touchend) m.element.removeEventListener("touchend", m.touchend);
+    // ---------------- Pointer drag (unified mouse + touch) ----------------
+    // We DO NOT use Matter's MouseConstraint. We implement a simple, explicit
+    // pointer drag that only activates when the pointer-down lands on a pill.
+    // For everything else (empty canvas area), pointer events are ignored
+    // entirely so the page scrolls and pans naturally.
 
-    const mouseConstraint = MouseConstraint.create(engine, {
-      mouse,
-      constraint: { stiffness: 0.22, damping: 0.2, render: { visible: false } },
-    });
-    Composite.add(engine.world, mouseConstraint);
-    render.mouse = mouse;
+    let dragBody: Matter.Body | null = null;
+    let dragOffset = { x: 0, y: 0 }; // local point on body where the pointer grabbed
+    let pointerId: number | null = null;
+    let lastPos = { x: 0, y: 0, t: 0 };
+    let prevPos = { x: 0, y: 0, t: 0 };
+    let savedFrictionAir = 0.012;
 
-    type Sample = { x: number; y: number; t: number };
-    const samples: Sample[] = [];
-    const MAX_SAMPLES = 6;
-    const THROW_WINDOW_MS = 80;
-    const MAX_THROW = 22;
-    let savedFrictionAir: number | null = null;
-    let savedFriction: number | null = null;
-    let savedDensity: number | null = null;
-    let draggedBody: Matter.Body | null = null;
-
-    const pushSample = () => {
-      const pos = (mouse as unknown as { position?: { x: number; y: number } }).position;
-      if (!pos) return;
-      samples.push({ x: pos.x, y: pos.y, t: performance.now() });
-      if (samples.length > MAX_SAMPLES) samples.shift();
-    };
-
-    Matter.Events.on(mouseConstraint, "startdrag", (e) => {
-      draggedBody = (e as unknown as { body: Matter.Body }).body;
-      if (draggedBody) {
-        savedFrictionAir = draggedBody.frictionAir;
-        savedFriction = draggedBody.friction;
-        savedDensity = draggedBody.density;
-        draggedBody.frictionAir = 0.001;
-        draggedBody.friction = 0;
-        Matter.Body.setDensity(draggedBody, Math.max(0.0008, (savedDensity ?? 0.002) * 0.7));
-      }
-      samples.length = 0;
-      pushSample();
-      canvasEl.style.cursor = "grabbing";
-    });
-
-    Matter.Events.on(mouseConstraint, "enddrag", () => {
-      const body = draggedBody;
-      if (body && savedFrictionAir !== null) body.frictionAir = savedFrictionAir;
-      if (body && savedFriction !== null) body.friction = savedFriction;
-      if (body && savedDensity !== null) Matter.Body.setDensity(body, savedDensity);
-      if (body && samples.length >= 2) {
-        const now = performance.now();
-        const recent = samples.filter((s) => now - s.t <= THROW_WINDOW_MS);
-        const first = recent[0] ?? samples[0];
-        const last = samples[samples.length - 1];
-        const dt = Math.max(1, last.t - first.t);
-        let vx = ((last.x - first.x) / dt) * 16;
-        let vy = ((last.y - first.y) / dt) * 16;
-        const sp = Math.hypot(vx, vy);
-        if (sp > MAX_THROW) {
-          const k = MAX_THROW / sp;
-          vx *= k;
-          vy *= k;
-        }
-        if (sp > 1.2) {
-          Matter.Body.setVelocity(body, { x: vx * 0.95, y: vy * 0.95 });
-        }
-      }
-      draggedBody = null;
-      savedFrictionAir = null;
-      savedFriction = null;
-      savedDensity = null;
-      samples.length = 0;
-      canvasEl.style.cursor = "grab";
-    });
-
-    Matter.Events.on(engine, "beforeUpdate", () => {
-      if (draggedBody) pushSample();
-    });
-
-    // Settle damper — kills jitter so pills come to rest cleanly.
-    Matter.Events.on(engine, "afterUpdate", () => {
-      const now = performance.now();
-      for (const b of bodiesRef.current) {
-        if ((mouseConstraint as unknown as { body?: Matter.Body }).body === b) continue;
-        if (Math.abs(b.angularVelocity) > 0.4) {
-          Matter.Body.setAngularVelocity(b, Math.sign(b.angularVelocity) * 0.4);
-        }
-        const anyB = b as unknown as { __spawnAt?: number };
-        const spawnAt = anyB.__spawnAt;
-        if (spawnAt && now - spawnAt < 1500) {
-          Matter.Body.setVelocity(b, { x: b.velocity.x * 0.985, y: b.velocity.y * 0.985 });
-        }
-        const sp = Math.hypot(b.velocity.x, b.velocity.y);
-        if (sp < 0.07 && Math.abs(b.angularVelocity) < 0.025) {
-          Matter.Body.setVelocity(b, { x: 0, y: 0 });
-          Matter.Body.setAngularVelocity(b, 0);
-        }
-      }
-    });
-
-    let lastHoverCheck = 0;
-    const onMouseMove = (e: MouseEvent) => {
-      if (draggedBody) return;
-      const now = performance.now();
-      if (now - lastHoverCheck < 16) return;
-      lastHoverCheck = now;
-      const rect = canvasEl.getBoundingClientRect();
-      const pt = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-      const hit = Matter.Query.point(bodiesRef.current, pt)[0];
-      canvasEl.style.cursor = hit ? "grab" : "default";
-    };
-    canvasEl.addEventListener("mousemove", onMouseMove);
-
-    // Forgiving grab for clicks just outside a pill.
-    const GRAB_RADIUS = 28;
-    const onMouseDownPick = () => {
-      const mc = mouseConstraint as unknown as {
-        body: Matter.Body | null;
-        constraint: {
-          pointA: { x: number; y: number };
-          bodyB: Matter.Body;
-          pointB: { x: number; y: number };
-        };
-      };
-      if (mc.body) return;
-      const pos = (mouse as unknown as { position?: { x: number; y: number } }).position;
-      if (!pos) return;
-      const exact = Matter.Query.point(bodiesRef.current, pos)[0];
-      if (exact) return;
-      let target: Matter.Body | null = null;
-      let bestDist = GRAB_RADIUS * GRAB_RADIUS;
-      for (const b of bodiesRef.current) {
-        const dx = b.position.x - pos.x;
-        const dy = b.position.y - pos.y;
-        const d2 = dx * dx + dy * dy;
-        if (d2 < bestDist) {
-          bestDist = d2;
-          target = b;
-        }
-      }
-      if (target) {
-        const dx = pos.x - target.position.x;
-        const dy = pos.y - target.position.y;
-        const cos = Math.cos(-target.angle);
-        const sin = Math.sin(-target.angle);
-        const localX = dx * cos - dy * sin;
-        const localY = dx * sin + dy * cos;
-        mc.body = target;
-        mc.constraint.pointA = { x: pos.x, y: pos.y };
-        mc.constraint.bodyB = target;
-        mc.constraint.pointB = { x: localX, y: localY };
-      }
-    };
-    Matter.Events.on(mouseConstraint, "mousedown", onMouseDownPick);
-
-    // Scroll-driven gentle nudge.
-    let lastScrollY = window.scrollY;
-    let pendingDelta = 0;
-    let rafId = 0;
-    const MAX_SPEED = 12;
-    const flushScroll = () => {
-      rafId = 0;
-      const delta = Math.max(-60, Math.min(60, pendingDelta));
-      pendingDelta = 0;
-      if (Math.abs(delta) < 0.5) return;
-      const cx = (render.options.width || width) / 2;
-      const nudge = -delta * 0.05;
-      for (const b of bodiesRef.current) {
-        if ((mouseConstraint as unknown as { body?: Matter.Body }).body === b) continue;
-        const v = b.velocity;
-        let nvx = v.x;
-        let nvy = v.y + nudge;
-        const sp = Math.hypot(nvx, nvy);
-        if (sp > MAX_SPEED) {
-          const k = MAX_SPEED / sp;
-          nvx *= k;
-          nvy *= k;
-        }
-        Matter.Body.setVelocity(b, { x: nvx, y: nvy });
-        const side = cx > 0 ? (b.position.x - cx) / cx : 0;
-        Matter.Body.setAngularVelocity(b, b.angularVelocity + delta * 0.0005 * side);
-      }
-    };
-    const onScroll = () => {
-      const y = window.scrollY;
-      pendingDelta += y - lastScrollY;
-      lastScrollY = y;
-      if (!rafId) rafId = window.requestAnimationFrame(flushScroll);
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-
-    // Touch arbitration — decide drag vs. scroll on touchstart.
-    type TouchState = {
-      startX: number;
-      startY: number;
-      decided: "none" | "drag" | "scroll";
-      bodyHit: Matter.Body | null;
-    };
-    let touchState: TouchState | null = null;
-    const DRAG_THRESHOLD = 2;
-    const NORMAL_STIFFNESS = 0.22;
-    const TOUCH_STIFFNESS = 0.4;
-    const MAX_DRAG_VEL = 25;
+    const TOUCH_GRAB_RADIUS = 40;
+    const MAX_FLING_SPEED = 22; // px per frame after release
 
     const getCanvasPoint = (clientX: number, clientY: number) => {
-      const rect = canvasEl.getBoundingClientRect();
+      const rect = canvas.getBoundingClientRect();
       return { x: clientX - rect.left, y: clientY - rect.top };
     };
 
-    const findBodyAt = (x: number, y: number): Matter.Body | null => {
-      const found = Matter.Query.point(bodiesRef.current, { x, y });
-      return found[0] || null;
-    };
-
-    const onTouchStart = (e: TouchEvent) => {
-      touchState = null;
-      if (e.touches.length !== 1) return;
-      const t = e.touches[0];
-      const pt = getCanvasPoint(t.clientX, t.clientY);
-      // Direct hit first; otherwise fall back to nearest pill within ~36px so
-      // an imprecise tap still grabs a pill instead of being treated as scroll.
-      let hit = findBodyAt(pt.x, pt.y);
-      if (!hit) {
-        const TOUCH_GRAB_RADIUS = 36;
-        let bestDist = TOUCH_GRAB_RADIUS * TOUCH_GRAB_RADIUS;
-        for (const b of bodiesRef.current) {
-          const dx = b.position.x - pt.x;
-          const dy = b.position.y - pt.y;
-          const d2 = dx * dx + dy * dy;
-          if (d2 < bestDist) {
-            bestDist = d2;
-            hit = b;
-          }
+    const findBodyNear = (pt: { x: number; y: number }, isTouch: boolean): Matter.Body | null => {
+      // Direct hit first.
+      const exact = Query.point(bodiesRef.current, pt)[0];
+      if (exact) return exact;
+      // Forgiving fallback (touch only — desktop click stays precise).
+      if (!isTouch) return null;
+      let best: Matter.Body | null = null;
+      let bestDist = TOUCH_GRAB_RADIUS * TOUCH_GRAB_RADIUS;
+      for (const b of bodiesRef.current) {
+        const dx = b.position.x - pt.x;
+        const dy = b.position.y - pt.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestDist) {
+          bestDist = d2;
+          best = b;
         }
       }
-      touchState = {
-        startX: t.clientX,
-        startY: t.clientY,
-        decided: hit ? "none" : "scroll",
-        bodyHit: hit,
+      return best;
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (dragBody) return; // already dragging something
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      const pt = getCanvasPoint(e.clientX, e.clientY);
+      const isTouch = e.pointerType !== "mouse";
+      const hit = findBodyNear(pt, isTouch);
+      if (!hit) return; // tap on empty area — let the browser scroll
+
+      e.preventDefault();
+      dragBody = hit;
+      pointerId = e.pointerId;
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+
+      // Compute local grab offset so the body rotates around the grab point.
+      const cos = Math.cos(-hit.angle);
+      const sin = Math.sin(-hit.angle);
+      const dx = pt.x - hit.position.x;
+      const dy = pt.y - hit.position.y;
+      dragOffset = {
+        x: dx * cos - dy * sin,
+        y: dx * sin + dy * cos,
       };
+
+      savedFrictionAir = hit.frictionAir;
+      hit.frictionAir = 0.001;
+      const now = performance.now();
+      lastPos = { x: pt.x, y: pt.y, t: now };
+      prevPos = { ...lastPos };
+      canvas.style.cursor = "grabbing";
     };
 
-    const onTouchMove = (e: TouchEvent) => {
-      if (!touchState || e.touches.length !== 1) return;
-      if (touchState.decided === "scroll") return;
-      const t = e.touches[0];
-      const dx = t.clientX - touchState.startX;
-      const dy = t.clientY - touchState.startY;
-
-      if (touchState.decided === "none") {
-        const adx = Math.abs(dx);
-        const ady = Math.abs(dy);
-        if (adx < DRAG_THRESHOLD && ady < DRAG_THRESHOLD) return;
-        if (ady > adx * 1.2) {
-          touchState.decided = "scroll";
-          return;
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragBody || e.pointerId !== pointerId) {
+        // If hovering on desktop without dragging, update cursor on hit.
+        if (!dragBody && e.pointerType === "mouse") {
+          const pt = getCanvasPoint(e.clientX, e.clientY);
+          const hit = Query.point(bodiesRef.current, pt)[0];
+          canvas.style.cursor = hit ? "grab" : "default";
         }
-        touchState.decided = "drag";
-        const pt = getCanvasPoint(t.clientX, t.clientY);
-        const mouseAny = mouse as unknown as {
-          position: { x: number; y: number };
-          mousedownPosition: { x: number; y: number };
-          mouseupPosition: { x: number; y: number };
-          button: number;
-        };
-        mouseAny.position = { x: pt.x, y: pt.y };
-        mouseAny.mousedownPosition = { x: pt.x, y: pt.y };
-        mouseAny.mouseupPosition = { x: pt.x, y: pt.y };
-        mouseAny.button = 0;
-        (mouseConstraint.constraint as unknown as { stiffness: number }).stiffness = TOUCH_STIFFNESS;
-        (mouseConstraint as unknown as { body: Matter.Body | null }).body = touchState.bodyHit;
-        canvasEl.style.touchAction = "none";
+        return;
       }
+      e.preventDefault();
+      const pt = getCanvasPoint(e.clientX, e.clientY);
+      const now = performance.now();
+      prevPos = lastPos;
+      lastPos = { x: pt.x, y: pt.y, t: now };
 
-      if (touchState.decided === "drag") {
-        e.preventDefault();
-        const pt = getCanvasPoint(t.clientX, t.clientY);
-        (mouse as unknown as { position: { x: number; y: number } }).position = { x: pt.x, y: pt.y };
-        const body = (mouseConstraint as unknown as { body: Matter.Body | null }).body;
-        if (body) {
-          const sp = Math.hypot(body.velocity.x, body.velocity.y);
-          if (sp > MAX_DRAG_VEL) {
-            const k = MAX_DRAG_VEL / sp;
-            Matter.Body.setVelocity(body, { x: body.velocity.x * k, y: body.velocity.y * k });
-          }
-        }
-      }
+      // Compute target world position so the original grab point follows the cursor.
+      const cos = Math.cos(dragBody.angle);
+      const sin = Math.sin(dragBody.angle);
+      const grabWorldX = dragOffset.x * cos - dragOffset.y * sin;
+      const grabWorldY = dragOffset.x * sin + dragOffset.y * cos;
+      const targetX = pt.x - grabWorldX;
+      const targetY = pt.y - grabWorldY;
+
+      // Move the body directly. This is more stable than a soft constraint.
+      Body.setPosition(dragBody, { x: targetX, y: targetY });
+      Body.setVelocity(dragBody, { x: 0, y: 0 });
+      Body.setAngularVelocity(dragBody, dragBody.angularVelocity * 0.6);
     };
 
-    const onTouchEnd = () => {
-      if (touchState && touchState.decided === "drag") {
-        (mouseConstraint as unknown as { body: Matter.Body | null }).body = null;
-        (mouse as unknown as { button: number }).button = -1;
-        (mouseConstraint.constraint as unknown as { stiffness: number }).stiffness = NORMAL_STIFFNESS;
+    const releaseDrag = () => {
+      if (!dragBody) return;
+      const body = dragBody;
+      body.frictionAir = savedFrictionAir;
+      // Compute fling velocity from the last two pointer samples.
+      const dt = Math.max(8, lastPos.t - prevPos.t);
+      let vx = ((lastPos.x - prevPos.x) / dt) * 16;
+      let vy = ((lastPos.y - prevPos.y) / dt) * 16;
+      const sp = Math.hypot(vx, vy);
+      if (sp > MAX_FLING_SPEED) {
+        const k = MAX_FLING_SPEED / sp;
+        vx *= k;
+        vy *= k;
       }
-      canvasEl.style.touchAction = "manipulation";
-      touchState = null;
+      Body.setVelocity(body, { x: vx * 0.9, y: vy * 0.9 });
+      Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.05);
+      dragBody = null;
+      pointerId = null;
+      canvas.style.cursor = "default";
     };
 
-    canvasEl.addEventListener("touchstart", onTouchStart, { passive: true });
-    canvasEl.addEventListener("touchmove", onTouchMove, { passive: false });
-    canvasEl.addEventListener("touchend", onTouchEnd, { passive: true });
-    canvasEl.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return;
+      try {
+        canvas.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      releaseDrag();
+    };
 
-    Render.run(render);
-    const runner = Runner.create({ delta: 1000 / 60, isFixed: true } as unknown as Matter.IRunnerOptions);
-    Runner.run(runner, engine);
+    const onPointerCancel = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return;
+      releaseDrag();
+    };
 
-    // Custom render — flat Kitsys pills (solid color, no gradient/border).
-    Matter.Events.on(render, "afterRender", () => {
-      const c = render.context;
-      c.save();
-      c.font = `600 ${FONT_SIZE}px Inter, system-ui, sans-serif`;
-      c.textAlign = "center";
-      c.textBaseline = "middle";
+    // touch-action: pan-y allows native vertical scroll over empty canvas.
+    canvas.style.touchAction = "pan-y";
+    canvas.addEventListener("pointerdown", onPointerDown);
+    canvas.addEventListener("pointermove", onPointerMove);
+    canvas.addEventListener("pointerup", onPointerUp);
+    canvas.addEventListener("pointercancel", onPointerCancel);
 
-      // Soft contact shadow when resting near the floor.
-      bodiesRef.current.forEach((b) => {
-        const anyB = b as unknown as { __h?: number; __w?: number };
-        if (!anyB.__h || !anyB.__w) return;
-        const distToFloor = h - (b.position.y + anyB.__h / 2);
-        if (distToFloor < 30 && distToFloor > -2) {
-          const t = 1 - Math.max(0, Math.min(1, distToFloor / 30));
-          const shadowW = anyB.__w * 0.5;
-          c.save();
-          c.fillStyle = `rgba(15, 23, 42, ${0.07 * t})`;
-          c.beginPath();
-          c.ellipse(b.position.x, h - 1, shadowW, 4, 0, 0, Math.PI * 2);
-          c.fill();
-          c.restore();
+    // ---------------- Settle damper ----------------
+    Events.on(engine, "afterUpdate", () => {
+      for (const b of bodiesRef.current) {
+        if (b === dragBody) continue;
+        if (Math.abs(b.angularVelocity) > 0.5) {
+          Body.setAngularVelocity(b, Math.sign(b.angularVelocity) * 0.5);
         }
-      });
+        const sp = Math.hypot(b.velocity.x, b.velocity.y);
+        if (sp < 0.06 && Math.abs(b.angularVelocity) < 0.02) {
+          Body.setVelocity(b, { x: 0, y: 0 });
+          Body.setAngularVelocity(b, 0);
+        }
+      }
+    });
 
-      // Pills — flat fill, just like Kitsys.
-      bodiesRef.current.forEach((b) => {
-        const anyB = b as unknown as {
+    // ---------------- Render loop (manual rAF, no Matter.Render) ----------------
+    let rafId = 0;
+    let lastFrame = performance.now();
+    const FIXED_DT = 1000 / 60;
+    let acc = 0;
+
+    const renderFrame = (now: number) => {
+      const delta = Math.min(50, now - lastFrame);
+      lastFrame = now;
+      acc += delta;
+      while (acc >= FIXED_DT) {
+        Engine.update(engine, FIXED_DT);
+        acc -= FIXED_DT;
+      }
+
+      // Draw
+      ctx.clearRect(0, 0, width, h);
+      ctx.font = `600 ${FONT_SIZE}px Inter, system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      // Soft contact shadows near floor.
+      for (const b of bodiesRef.current) {
+        const meta = b as unknown as { __h?: number; __w?: number };
+        if (!meta.__h || !meta.__w) continue;
+        const distToFloor = h - (b.position.y + meta.__h / 2);
+        if (distToFloor < 26 && distToFloor > -2) {
+          const t = 1 - Math.max(0, Math.min(1, distToFloor / 26));
+          const shadowW = meta.__w * 0.45;
+          ctx.save();
+          ctx.fillStyle = `rgba(15, 23, 42, ${0.08 * t})`;
+          ctx.beginPath();
+          ctx.ellipse(b.position.x, h - 1, shadowW, 4, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      // Pills
+      for (const b of bodiesRef.current) {
+        const meta = b as unknown as {
           __label?: string;
           __w?: number;
           __h?: number;
           __bg?: string;
           __fg?: string;
         };
-        if (!anyB.__label || !anyB.__w || !anyB.__h || !anyB.__bg || !anyB.__fg) return;
-        const w = anyB.__w;
-        const hh = anyB.__h;
-        c.save();
-        c.translate(b.position.x, b.position.y);
-        c.rotate(b.angle);
-        c.fillStyle = anyB.__bg;
+        if (!meta.__label || !meta.__w || !meta.__h || !meta.__bg || !meta.__fg) continue;
+        const w = meta.__w;
+        const hh = meta.__h;
+        ctx.save();
+        ctx.translate(b.position.x, b.position.y);
+        ctx.rotate(b.angle);
+        ctx.fillStyle = meta.__bg;
         const r = hh / 2;
-        c.beginPath();
-        c.moveTo(-w / 2 + r, -hh / 2);
-        c.lineTo(w / 2 - r, -hh / 2);
-        c.arc(w / 2 - r, 0, r, -Math.PI / 2, Math.PI / 2);
-        c.lineTo(-w / 2 + r, hh / 2);
-        c.arc(-w / 2 + r, 0, r, Math.PI / 2, -Math.PI / 2);
-        c.closePath();
-        c.fill();
-        c.fillStyle = anyB.__fg;
-        c.fillText(anyB.__label, 0, 1);
-        c.restore();
-      });
-      c.restore();
-    });
+        ctx.beginPath();
+        ctx.moveTo(-w / 2 + r, -hh / 2);
+        ctx.lineTo(w / 2 - r, -hh / 2);
+        ctx.arc(w / 2 - r, 0, r, -Math.PI / 2, Math.PI / 2);
+        ctx.lineTo(-w / 2 + r, hh / 2);
+        ctx.arc(-w / 2 + r, 0, r, Math.PI / 2, -Math.PI / 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = meta.__fg;
+        ctx.fillText(meta.__label, 0, 1);
+        ctx.restore();
+      }
 
+      rafId = requestAnimationFrame(renderFrame);
+    };
+    rafId = requestAnimationFrame(renderFrame);
+
+    // ---------------- Resize ----------------
     const onResize = () => {
       const newW = container.clientWidth;
-      render.canvas.width = newW * (window.devicePixelRatio || 1);
-      render.canvas.height = h * (window.devicePixelRatio || 1);
-      render.canvas.style.width = `${newW}px`;
-      render.canvas.style.height = `${h}px`;
-      render.options.width = newW;
-      render.options.height = h;
-      Matter.Render.setPixelRatio(render, window.devicePixelRatio || 1);
-      Matter.Body.setPosition(floor, { x: newW / 2, y: h + WALL_T / 2 });
-      Matter.Body.setPosition(leftWall, { x: -WALL_T / 2, y: h / 2 });
-      Matter.Body.setPosition(rightWall, { x: newW + WALL_T / 2, y: h / 2 });
+      if (newW === width) return;
+      const r = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      canvas.width = Math.floor(newW * r);
+      canvas.height = Math.floor(h * r);
+      canvas.style.width = `${newW}px`;
+      canvas.style.height = `${h}px`;
+      const c = canvas.getContext("2d");
+      if (c) c.setTransform(r, 0, 0, r, 0, 0);
+      Body.setPosition(floor, { x: newW / 2, y: h + WALL_T / 2 });
+      Body.setPosition(leftWall, { x: -WALL_T / 2, y: h / 2 });
+      Body.setPosition(rightWall, { x: newW + WALL_T / 2, y: h / 2 });
+      Body.setPosition(ceiling, { x: newW / 2, y: -800 - WALL_T / 2 });
     };
     window.addEventListener("resize", onResize);
 
+    // ---------------- Cleanup ----------------
     return () => {
+      cancelAnimationFrame(rafId);
       clearTimers();
       window.clearInterval(cleanupId);
-      canvasEl.removeEventListener("touchstart", onTouchStart);
-      canvasEl.removeEventListener("touchmove", onTouchMove);
-      canvasEl.removeEventListener("touchend", onTouchEnd);
-      canvasEl.removeEventListener("touchcancel", onTouchEnd);
-      canvasEl.removeEventListener("mousemove", onMouseMove);
+      canvas.removeEventListener("pointerdown", onPointerDown);
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerup", onPointerUp);
+      canvas.removeEventListener("pointercancel", onPointerCancel);
       window.removeEventListener("resize", onResize);
-      window.removeEventListener("scroll", onScroll);
-      if (rafId) window.cancelAnimationFrame(rafId);
-      Matter.Events.off(mouseConstraint, "mousedown", onMouseDownPick);
-      Render.stop(render);
-      Runner.stop(runner);
       Composite.clear(engine.world, false);
       Engine.clear(engine);
-      render.canvas.width = 0;
-      render.canvas.height = 0;
       engineRef.current = null;
       worldRef.current = null;
       bodiesRef.current = [];
@@ -635,12 +497,12 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     <div
       ref={sceneRef}
       className={`relative w-full ${className}`}
-      style={{ height, touchAction: "manipulation" }}
+      style={{ height, touchAction: "pan-y" }}
     >
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing"
-        style={{ touchAction: "manipulation" }}
+        className="absolute inset-0 w-full h-full"
+        style={{ touchAction: "pan-y" }}
       />
     </div>
   );

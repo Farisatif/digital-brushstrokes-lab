@@ -47,32 +47,34 @@ function Index() {
       <Hero />
       <Marquee items={tagsEn} itemsAr={tagsAr} key={lang} />
 
-      {/* Curated rhythm: each section has its own visual character */}
-      <SectionBand variant="light" pattern="grid" divider>
+      {/* Curated rhythm — alternating bands for a clear, magazine-style flow.
+          Light/dark tokens auto-invert between themes, so the same layout
+          feels right in both modes. */}
+      <SectionBand variant="light" pattern="grid-fine" divider>
         <AboutSection />
       </SectionBand>
 
-      <SectionBand variant="dark" pattern="mesh" divider>
+      <SectionBand variant="dark" pattern="none" divider>
         <SkillsSection />
       </SectionBand>
 
-      <SectionBand variant="primary" pattern="grid-fine" divider>
+      <SectionBand variant="light" pattern="grid-fine" divider>
         <ExperienceSection />
       </SectionBand>
 
-      <SectionBand variant="light" pattern="grid-fine" divider>
+      <SectionBand variant="primary" pattern="grid" divider>
         <ProjectsSection />
       </SectionBand>
 
-      <SectionBand variant="dark" pattern="mesh" divider>
+      <SectionBand variant="light" pattern="grid-fine" divider>
         <AchievementsSection />
       </SectionBand>
 
-      <SectionBand variant="primary" pattern="grid" divider>
+      <SectionBand variant="dark" pattern="none" divider>
         <GithubActivitySection />
       </SectionBand>
 
-      <SectionBand variant="light" pattern="grid" divider>
+      <SectionBand variant="dark" pattern="grid-fine" divider>
         <ContactSection />
       </SectionBand>
     </div>
