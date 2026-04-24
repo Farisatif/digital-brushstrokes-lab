@@ -44,11 +44,13 @@ export function Comments() {
       .channel("comments-stream")
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "comments" },
+        { event: "UPDATE", schema: "public", table: "comments" },
         (payload) => {
-          const c = payload.new as Comment;
+          const c = payload.new as Comment & { status?: string };
+          if (c.status !== "approved") return;
+          // Only add if not already present
           newIdRef.current = c.id;
-          setItems((prev) => [c, ...prev]);
+          setItems((prev) => (prev.some((x) => x.id === c.id) ? prev : [c, ...prev]));
         },
       )
       .subscribe();
@@ -181,7 +183,10 @@ export function Comments() {
       toast.error(t("Could not post your comment", "تعذر نشر تعليقك"), { description: error.message });
       return;
     }
-    toast.success(t("Comment posted", "تم نشر التعليق"));
+    toast.success(
+      t("Submitted for review", "تم الإرسال للمراجعة"),
+      { description: t("Your comment will appear once approved.", "سيظهر تعليقك بعد الموافقة عليه.") },
+    );
     setMessage("");
     setIsTyping(false);
   };
