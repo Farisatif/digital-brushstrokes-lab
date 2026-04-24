@@ -64,6 +64,8 @@ type ExtBody = Matter.Body & {
   __h: number;
   __spawnAt: number;
   __flashUntil?: number;
+  /** Depth factor (0.4 = far/back, 1.4 = near/front). Drives sensor parallax magnitude. */
+  __depth: number;
 };
 
 const WALL_T = 80;
@@ -95,6 +97,12 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
   const hasSpawnedRef = useRef(false);
 
   const [showHint, setShowHint] = useState(false);
+  // iOS 13+ requires a user gesture to grant access to motion/orientation
+  // sensors. We show a small "Enable motion" button only when (a) the API
+  // requires a permission request AND (b) we haven't been granted yet.
+  const [needsMotionPermission, setNeedsMotionPermission] = useState(false);
+  const [motionDenied, setMotionDenied] = useState(false);
+  const sensorAttachRef = useRef<(() => void) | null>(null);
 
   const pillData = useMemo(
     () =>
@@ -180,6 +188,10 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       body.__w = w;
       body.__h = h;
       body.__spawnAt = performance.now();
+      // Pseudo-3D depth: front pills (depth > 1) react more to tilt/shake,
+      // back pills (depth < 1) react less. Distribution favours mid range
+      // so the field feels layered without any pill being inert.
+      body.__depth = 0.5 + Math.random() * 0.95;
       return body;
     };
 
