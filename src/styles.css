@@ -72,14 +72,6 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(0.985 0.003 240);
-  --foreground: oklch(0.12 0.02 250);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.12 0.02 250);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.12 0.02 250);
-:root {
-  --radius: 0.625rem;
   /* Refined off-white background — warmer, less blue tint, more "paper". */
   --background: oklch(0.985 0.004 255);
   --foreground: oklch(0.145 0.025 260);
