@@ -68,6 +68,11 @@
   --color-band-dark-foreground: var(--band-dark-foreground);
   --color-band-primary: var(--band-primary);
   --color-band-primary-foreground: var(--band-primary-foreground);
+  /* Extended band tokens for layered depth across the page */
+  --color-band-surface: var(--band-surface);
+  --color-band-surface-foreground: var(--band-surface-foreground);
+  --color-band-soft: var(--band-soft);
+  --color-band-soft-foreground: var(--band-soft-foreground);
   /* Surface tokens — layered depth scale for cards/elevated panels */
   --color-surface-1: var(--surface-1);
   --color-surface-2: var(--surface-2);
@@ -119,6 +124,11 @@
   --band-dark-foreground: oklch(0.985 0.004 255);
   --band-primary: oklch(0.42 0.22 268);
   --band-primary-foreground: oklch(0.99 0.005 240);
+  /* Light-mode extended bands: warm paper → cool surface → indigo wash */
+  --band-surface: oklch(0.97 0.006 258);
+  --band-surface-foreground: oklch(0.16 0.025 260);
+  --band-soft: oklch(0.95 0.025 265);
+  --band-soft-foreground: oklch(0.18 0.04 265);
   --gradient-hero: radial-gradient(ellipse at top, oklch(0.95 0.05 268 / 0.5), transparent 60%);
   --gradient-primary: linear-gradient(135deg, var(--primary) 0%, var(--primary-glow) 100%);
   --gradient-mesh: radial-gradient(at 20% 20%, oklch(0.92 0.06 268 / 0.4) 0px, transparent 50%),
@@ -179,6 +189,11 @@
   --band-dark-foreground: oklch(0.105 0.022 268);
   --band-primary: oklch(0.6 0.22 268);
   --band-primary-foreground: oklch(0.09 0.018 268);
+  /* Dark-mode extended bands: deep indigo → elevated surface → primary wash */
+  --band-surface: oklch(0.115 0.022 268);
+  --band-surface-foreground: oklch(0.985 0.004 255);
+  --band-soft: oklch(0.16 0.04 268);
+  --band-soft-foreground: oklch(0.985 0.004 255);
   --gradient-primary: linear-gradient(135deg, var(--primary) 0%, var(--primary-glow) 100%);
   --gradient-mesh: radial-gradient(at 20% 20%, oklch(0.32 0.18 268 / 0.5) 0px, transparent 50%),
                    radial-gradient(at 80% 0%, oklch(0.28 0.16 240 / 0.4) 0px, transparent 50%),
@@ -309,6 +324,21 @@
       linear-gradient(to right, color-mix(in oklab, currentColor 4%, transparent) 1px, transparent 1px),
       linear-gradient(to bottom, color-mix(in oklab, currentColor 4%, transparent) 1px, transparent 1px);
     background-size: 32px 32px;
+  }
+  /* Premium dotted grid for elevated bands */
+  .grid-bg-dots {
+    background-image: radial-gradient(
+      color-mix(in oklab, currentColor 14%, transparent) 1px,
+      transparent 1px
+    );
+    background-size: 24px 24px;
+    mask-image: radial-gradient(ellipse at center, black 50%, transparent 85%);
+  }
+  /* Soft aurora wash — used behind feature sections */
+  .aurora-bg {
+    background:
+      radial-gradient(ellipse 80% 50% at 20% 0%, color-mix(in oklab, var(--primary) 18%, transparent), transparent 60%),
+      radial-gradient(ellipse 70% 60% at 90% 100%, color-mix(in oklab, var(--primary-glow) 14%, transparent), transparent 60%);
   }
   /* Noise overlay for refined depth */
   .noise-overlay {

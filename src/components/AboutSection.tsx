@@ -24,7 +24,7 @@ export function AboutSection() {
             </p>
             <h2 className="font-display text-5xl sm:text-7xl tracking-[-0.04em] leading-[0.95]">
               {t("Crafting software ", "أصنع برمجيات ")}
-              <span className="italic text-[oklch(0.42_0.2_255)]">
+              <span className="italic gradient-text-primary">
                 {t("that ships.", "تصل للمستخدم.")}
               </span>
             </h2>
