@@ -616,38 +616,35 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
         const accel = (smoothedVy - prevSmoothedVy) / dt; // px/ms²
 
         // ---- Channel 1: pseudo-force on every body (inertial reaction) ----
-        // Container moves DOWN (page scrolls down → window.scrollY +) →
-        // bodies feel a force UP relative to the container. Coefficient
-        // bumped 3× more (now ~18× original) so the scroll is clearly felt.
-        const inertiaForce = -smoothedVy * 0.018;
-        const clampedForce = Math.max(-0.06, Math.min(0.06, inertiaForce));
+        // Toned down significantly so fast scrolls don't fling pills into
+        // weird stuck positions. Smooth nudge instead of hard kick.
+        const inertiaForce = -smoothedVy * 0.006;
+        const clampedForce = Math.max(-0.022, Math.min(0.022, inertiaForce));
 
         // ---- Channel 2: temporary gravity bias from scroll acceleration ----
-        // Quick flicks tilt the gravity vector, then it eases back to base.
+        // Quick flicks gently tilt gravity, then it eases back to base fast.
         scrollGravityBias = Math.max(
-          -1.5,
-          Math.min(1.5, scrollGravityBias * 0.55 + accel * -420),
+          -0.6,
+          Math.min(0.6, scrollGravityBias * 0.55 + accel * -160),
         );
         engine.gravity.y = baseGravityYInitial + scrollGravityBias;
 
         if (Math.abs(clampedForce) < 0.00008) return;
         for (const b of bodiesRef.current) {
-          // Lateral jitter scales with force magnitude — fast scrolls cause
-          // a slightly chaotic shake, slow scrolls a near-perfect drift.
-          const jitter = (Math.random() - 0.5) * Math.abs(clampedForce) * 0.65;
-          // Slight torque so the pills tumble naturally instead of sliding.
-          const torque = (Math.random() - 0.5) * Math.abs(clampedForce) * 4;
+          // Lateral jitter — much smaller so pills don't drift sideways.
+          const jitter = (Math.random() - 0.5) * Math.abs(clampedForce) * 0.35;
+          // Slight torque for natural tumble, but reduced.
+          const torque = (Math.random() - 0.5) * Math.abs(clampedForce) * 2;
           Matter.Body.applyForce(b, b.position, { x: jitter, y: clampedForce });
           b.torque += torque;
-          // Safety cap on linear velocity so a hard flick can't fling
-          // pills off-screen at unreadable speed.
+          // Safety cap on linear velocity — lower so things settle quickly.
           const v = b.velocity;
           const sp = Math.hypot(v.x, v.y);
-          if (sp > 22)
-            Matter.Body.setVelocity(b, { x: (v.x / sp) * 22, y: (v.y / sp) * 22 });
+          if (sp > 16)
+            Matter.Body.setVelocity(b, { x: (v.x / sp) * 16, y: (v.y / sp) * 16 });
           // Cap angular velocity too — prevent dizzy spins.
-          if (Math.abs(b.angularVelocity) > 0.45)
-            Matter.Body.setAngularVelocity(b, Math.sign(b.angularVelocity) * 0.45);
+          if (Math.abs(b.angularVelocity) > 0.3)
+            Matter.Body.setAngularVelocity(b, Math.sign(b.angularVelocity) * 0.3);
         }
       });
     };
@@ -658,11 +655,10 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     // engine tick — guarantees no stuck tilt.
     const onBeforeUpdate = () => {
       if (reducedMotionRef.current) return;
-      // Velocity decay for the smoothed estimator (otherwise after a long
-      // pause the next scroll inherits stale momentum).
-      smoothedVy *= 0.92;
-      // Gravity bias eases back home.
-      scrollGravityBias *= 0.9;
+      // Faster decay so pills settle quickly after a scroll burst —
+      // no more "hanging" in mid-air after a fast flick.
+      smoothedVy *= 0.82;
+      scrollGravityBias *= 0.78;
       engine.gravity.y = baseGravityYInitial + scrollGravityBias;
     };
     Matter.Events.on(engine, "beforeUpdate", onBeforeUpdate);
