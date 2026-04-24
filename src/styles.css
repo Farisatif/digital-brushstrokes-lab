@@ -282,6 +282,75 @@
   .glow-shadow {
     box-shadow: 0 30px 80px -40px oklch(0.55 0.22 255 / 0.55);
   }
+  .elevated-shadow { box-shadow: var(--shadow-elevated); }
+  .primary-glow-shadow { box-shadow: var(--shadow-glow); }
+  .mesh-bg { background-image: var(--gradient-mesh); }
+  .gradient-primary-bg { background-image: var(--gradient-primary); }
+  .gradient-text-primary {
+    background-image: linear-gradient(135deg, var(--primary), var(--primary-glow));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .hairline { border-color: var(--hairline); }
+  .surface-1 { background-color: var(--surface-1); }
+  .surface-2 { background-color: var(--surface-2); }
+  .surface-3 { background-color: var(--surface-3); }
+  /* Subtle grid pattern for premium section backgrounds */
+  .grid-bg {
+    background-image:
+      linear-gradient(to right, color-mix(in oklab, currentColor 6%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in oklab, currentColor 6%, transparent) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse at center, black 40%, transparent 75%);
+  }
+  .grid-bg-fine {
+    background-image:
+      linear-gradient(to right, color-mix(in oklab, currentColor 4%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in oklab, currentColor 4%, transparent) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+  /* Noise overlay for refined depth */
+  .noise-overlay {
+    position: relative;
+  }
+  .noise-overlay::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.025;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  /* Section divider — subtle hairline with gradient fade */
+  .section-divider {
+    height: 1px;
+    background: linear-gradient(to right, transparent, color-mix(in oklab, currentColor 18%, transparent), transparent);
+  }
+  /* Eyebrow chip */
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.8rem;
+    border-radius: 9999px;
+    border: 1px solid color-mix(in oklab, currentColor 18%, transparent);
+    background: color-mix(in oklab, currentColor 4%, transparent);
+  }
+  .eyebrow::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--primary);
+    box-shadow: 0 0 12px var(--primary);
+  }
   .comments-spotlight {
     background:
       radial-gradient(
