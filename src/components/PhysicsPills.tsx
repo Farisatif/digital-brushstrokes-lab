@@ -444,7 +444,22 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       if (e.touches.length !== 1) return;
       const t = e.touches[0];
       const pt = getCanvasPoint(t.clientX, t.clientY);
-      const hit = findBodyAt(pt.x, pt.y);
+      // Direct hit first; otherwise fall back to nearest pill within ~36px so
+      // an imprecise tap still grabs a pill instead of being treated as scroll.
+      let hit = findBodyAt(pt.x, pt.y);
+      if (!hit) {
+        const TOUCH_GRAB_RADIUS = 36;
+        let bestDist = TOUCH_GRAB_RADIUS * TOUCH_GRAB_RADIUS;
+        for (const b of bodiesRef.current) {
+          const dx = b.position.x - pt.x;
+          const dy = b.position.y - pt.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < bestDist) {
+            bestDist = d2;
+            hit = b;
+          }
+        }
+      }
       touchState = {
         startX: t.clientX,
         startY: t.clientY,
