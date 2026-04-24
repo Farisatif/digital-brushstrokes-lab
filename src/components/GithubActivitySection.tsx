@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Github, Star, GitFork, ExternalLink, Users, BookMarked, RefreshCw, Loader2 } from "lucide-react";
+import { Github, Star, GitFork, ExternalLink, Users, BookMarked, RefreshCw } from "lucide-react";
 import { Reveal } from "./Reveal";
 import { useSiteData } from "./SiteDataProvider";
 import { useLang } from "./LanguageProvider";
 import { getGithubBundle, type GithubBundle } from "@/utils/github.functions";
 import { GlowDots } from "./GlowDots";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton, DotPulse } from "@/components/ui/skeleton";
 
 const CELL = 12; // px
 const GAP = 4; // px
@@ -238,7 +238,7 @@ export function GithubActivitySection() {
               disabled={refreshing}
               className="inline-flex items-center gap-2 rounded-full border border-border bg-background hover:bg-secondary px-4 py-2 text-xs disabled:opacity-50 transition"
             >
-              {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              {refreshing ? <DotPulse /> : <RefreshCw className="h-3.5 w-3.5" />}
               {t("Refresh", "تحديث")}
             </button>
           </div>
