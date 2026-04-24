@@ -91,7 +91,23 @@ async function checkPassword(password: string): Promise<PasswordCheck> {
   }
   try {
     const row = await readAdminRow();
-    const ok = await bcrypt.compare(password, row.password_hash);
+    let ok = await bcrypt.compare(password, row.password_hash);
+    // Self-heal: if the supplied password matches the configured Cloud secret
+    // exactly but the stored hash was rotated/stale, re-seed the hash from the
+    // secret so the admin can always log in with the configured password.
+    if (!ok) {
+      const seedPw = process.env.SETTINGS_ADMIN_PASSWORD;
+      if (seedPw && password === seedPw) {
+        const newHash = await bcrypt.hash(seedPw, 10);
+        const { error: upErr } = await supabaseAdmin
+          .from("admin_settings")
+          .update({ password_hash: newHash, updated_at: new Date().toISOString() })
+          .eq("id", "singleton");
+        if (!upErr) {
+          ok = true;
+        }
+      }
+    }
     if (!ok) {
       recordFail(key);
       return { ok: false, error: "Invalid password" };
