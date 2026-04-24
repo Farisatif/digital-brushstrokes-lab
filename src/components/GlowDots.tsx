@@ -75,6 +75,13 @@ export function GlowDots({
     cfg.dot = resolveColor(cfg.dot);
     cfg.glow = resolveColor(cfg.glow);
 
+    // Re-resolve colors when the theme class on <html> changes.
+    const themeObserver = new MutationObserver(() => {
+      cfg.dot = resolveColor(dotColor ?? CONFIG.dot);
+      cfg.glow = resolveColor(glowColor ?? CONFIG.glow);
+    });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+
     let dots: Dot[] = [];
     const pointer = { x: -9999, y: -9999, active: false };
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -192,6 +199,7 @@ export function GlowDots({
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      themeObserver.disconnect();
       target.removeEventListener("pointermove", onMove as EventListener);
       if (!asBackground) {
         canvas.removeEventListener("pointerdown", onMove);
