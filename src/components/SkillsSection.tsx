@@ -71,26 +71,23 @@ export function SkillsSection() {
       </div>
 
       {/* Physics canvas — clean bordered card */}
-      <div className="relative container mx-auto px-6 max-w-7xl mt-0">
-        <Reveal delay={0.15}>
-          <div className="relative rounded-t-3xl rounded-b-none overflow-hidden border border-b-0 border-border bg-background soft-shadow">
-            {/* Faint gradient floor line for a "real surface" feel. */}
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[oklch(0.55_0.18_255)]/[0.03] to-transparent" />
-            <button
-              type="button"
-              onClick={() => pillsRef.current?.replay()}
-              className="absolute top-3 right-4 z-10 inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 backdrop-blur px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-background transition"
-              aria-label={t("Replay", "إعادة")}
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              {t("Replay", "إعادة")}
-            </button>
-            <div className="relative">
-              <PhysicsPills ref={pillsRef} pills={pills} height={height} />
-            </div>
-          </div>
-        </Reveal>
-      </div>
+      {/* Physics canvas — full-bleed, no container. Pills bounce against the
+          viewport edges and the bottom of the section (which becomes their
+          floor as the next section starts). */}
+      <Reveal delay={0.15}>
+        <div className="relative w-full mt-0">
+          <button
+            type="button"
+            onClick={() => pillsRef.current?.replay()}
+            className="absolute top-3 right-4 sm:right-8 z-10 inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 backdrop-blur px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-background transition"
+            aria-label={t("Replay", "إعادة")}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            {t("Replay", "إعادة")}
+          </button>
+          <PhysicsPills ref={pillsRef} pills={pills} height={height} />
+        </div>
+      </Reveal>
     </section>
   );
 }

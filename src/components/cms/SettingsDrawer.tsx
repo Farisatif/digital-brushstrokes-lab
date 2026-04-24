@@ -269,7 +269,8 @@ export function SettingsDrawer() {
         aria-label="Open settings"
         data-cursor="view"
         data-cursor-label="Edit"
-        className="opacity-50 hover:opacity-100 transition-opacity inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-background/60 hover:text-background"
+        className="inline-flex items-center gap-2 rounded-full border border-current/20 px-3 py-1.5 text-[11px] uppercase tracking-[0.2em] opacity-60 hover:opacity-100 hover:bg-current/5 transition-all"
+        style={{ borderColor: "color-mix(in oklab, currentColor 25%, transparent)" }}
       >
         <Settings2 className="h-3.5 w-3.5" /> Settings
       </button>
@@ -290,7 +291,11 @@ export function SettingsDrawer() {
               transition={{ type: "spring", stiffness: 200, damping: 28 }}
               onClick={(e) => e.stopPropagation()}
               dir="ltr"
-              className="bg-background text-foreground w-full max-w-5xl rounded-t-3xl sm:rounded-3xl overflow-hidden soft-shadow flex flex-col h-[95vh] sm:h-auto sm:max-h-[92vh]"
+              style={{
+                backgroundColor: "var(--background)",
+                color: "var(--foreground)",
+              }}
+              className="w-full max-w-5xl rounded-t-3xl sm:rounded-3xl overflow-hidden soft-shadow flex flex-col h-[95vh] sm:h-auto sm:max-h-[92vh] border border-border"
             >
               {/* Sticky header */}
               <div className="sticky top-0 z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-3 sm:py-4 border-b border-border bg-background">

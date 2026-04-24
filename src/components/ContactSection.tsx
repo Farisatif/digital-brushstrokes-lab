@@ -76,11 +76,11 @@ export function ContactSection() {
       </div>
 
       <div className="container mx-auto px-6 max-w-7xl mt-32 relative">
-        <div className="flex flex-wrap gap-4 justify-between items-center text-xs opacity-50 border-t pt-8"
+        <div className="flex flex-wrap gap-4 justify-between items-center text-xs border-t pt-8"
           style={{ borderColor: "color-mix(in oklab, currentColor 12%, transparent)" }}>
-          <span>© {new Date().getFullYear()} {p.name}</span>
+          <span className="opacity-60">© {new Date().getFullYear()} {p.name}</span>
           <SettingsDrawer />
-          <span>{t("Built with care · Sana'a, YE", "صُنع بعناية · صنعاء، اليمن")}</span>
+          <span className="opacity-60">{t("Built with care · Sana'a, YE", "صُنع بعناية · صنعاء، اليمن")}</span>
         </div>
       </div>
     </section>
