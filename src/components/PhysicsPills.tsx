@@ -787,12 +787,34 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       if (!isSecure) return;
       if (supportsOrientation) window.addEventListener("deviceorientation", onOrient);
       if (supportsMotion) window.addEventListener("devicemotion", onMotion);
-      sensorAttachRef.current = () => {
-        if (supportsOrientation) window.removeEventListener("deviceorientation", onOrient);
-        if (supportsMotion) window.removeEventListener("devicemotion", onMotion);
-        sensorAttachRef.current = null;
-      };
     };
+
+    // Function the iOS permission button will call. Async so the click
+    // handler can `await` user choice before attaching listeners.
+    const requestMotion = async () => {
+      if (!isSecure) {
+        setMotionDenied(true);
+        return;
+      }
+      try {
+        const OE = DeviceOrientationEvent as unknown as AnyOrientationCtor;
+        const ME = DeviceMotionEvent as unknown as AnyMotionCtor;
+        const promises: Promise<"granted" | "denied">[] = [];
+        if (typeof OE.requestPermission === "function") promises.push(OE.requestPermission());
+        if (typeof ME.requestPermission === "function") promises.push(ME.requestPermission());
+        const results = await Promise.all(promises);
+        const granted = results.length === 0 || results.every((r) => r === "granted");
+        if (granted) {
+          attachSensors();
+          setNeedsMotionPermission(false);
+        } else {
+          setMotionDenied(true);
+        }
+      } catch {
+        setMotionDenied(true);
+      }
+    };
+    requestMotionRef.current = requestMotion;
 
     if (needsIosPermission) {
       // Wait for the user gesture — rendered as a button in the JSX below.
@@ -801,8 +823,6 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       // Auto-attach on Android / non-iOS phones where no permission is needed.
       attachSensors();
     }
-    // Expose attachment for the permission button click.
-    sensorAttachRef.current = sensorAttachRef.current ?? attachSensors;
 
     try {
       if (!sessionStorage.getItem("pp:hint:v1")) {
@@ -819,15 +839,12 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       clearSpawnTimers();
       window.removeEventListener("scroll", onScroll);
-      // Detach device sensors (if attached) and the pointer fallback.
-      if (sensorAttachRef.current) {
-        // sensorAttachRef stores either an attach fn (never called) or the
-        // detach fn after attachment. We only call it if it's a detacher;
-        // recognised by the fact that listeners were added.
-      }
+      // Detach device sensors (always safe to remove — no-op if not added)
+      // and the pointer fallback.
       if (supportsOrientation) window.removeEventListener("deviceorientation", onOrient);
       if (supportsMotion) window.removeEventListener("devicemotion", onMotion);
       wrap.removeEventListener("mousemove", onWrapMouseMove);
+      requestMotionRef.current = null;
       Matter.Events.off(engine, "beforeUpdate", onSensorTick);
       Matter.Events.off(engine, "beforeUpdate", onBeforeUpdate);
       canvas.removeEventListener("pointerdown", onPointerDown);
