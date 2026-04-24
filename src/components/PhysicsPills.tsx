@@ -22,18 +22,19 @@ export interface PhysicsPillsHandle {
  * gradients, no borders, no shadows beyond a soft contact ellipse.
  */
 const PALETTE: { bg: string; fg: string }[] = [
-  { bg: "#DCE6F7", fg: "#0B2A4A" },
-  { bg: "#1E3A8A", fg: "#FFFFFF" },
-  { bg: "#CFE8FF", fg: "#0B2A4A" },
-  { bg: "#0F172A", fg: "#FFFFFF" },
-  { bg: "#E6ECFB", fg: "#1E2A6B" },
-  { bg: "#1D4ED8", fg: "#FFFFFF" },
-  { bg: "#EFF3FB", fg: "#0B2A4A" },
-  { bg: "#3B82F6", fg: "#FFFFFF" },
-  { bg: "#C7D2FE", fg: "#1E2A6B" },
-  { bg: "#2563EB", fg: "#FFFFFF" },
-  { bg: "#F1F5FB", fg: "#0B2A4A" },
-  { bg: "#A5B4FC", fg: "#1E2A6B" },
+  // Balanced for dark backgrounds: neutrals + warm + a couple of brand accents.
+  { bg: "#F1F5F9", fg: "#0F172A" }, // porcelain
+  { bg: "#1E293B", fg: "#F1F5F9" }, // slate-800
+  { bg: "#E2E8F0", fg: "#1E293B" }, // slate-200
+  { bg: "#0F172A", fg: "#F1F5F9" }, // near-black
+  { bg: "#FCD9B6", fg: "#3B2A14" }, // warm peach
+  { bg: "#4338CA", fg: "#FFFFFF" }, // indigo accent
+  { bg: "#FAFAF9", fg: "#27272A" }, // off-white
+  { bg: "#334155", fg: "#F8FAFC" }, // slate-700
+  { bg: "#C4B5FD", fg: "#2E1065" }, // soft violet
+  { bg: "#1D4ED8", fg: "#FFFFFF" }, // brand blue (used sparingly)
+  { bg: "#E7E5E4", fg: "#1C1917" }, // stone
+  { bg: "#A7F3D0", fg: "#064E3B" }, // mint accent
 ];
 
 export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function PhysicsPills(
@@ -443,7 +444,22 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       if (e.touches.length !== 1) return;
       const t = e.touches[0];
       const pt = getCanvasPoint(t.clientX, t.clientY);
-      const hit = findBodyAt(pt.x, pt.y);
+      // Direct hit first; otherwise fall back to nearest pill within ~36px so
+      // an imprecise tap still grabs a pill instead of being treated as scroll.
+      let hit = findBodyAt(pt.x, pt.y);
+      if (!hit) {
+        const TOUCH_GRAB_RADIUS = 36;
+        let bestDist = TOUCH_GRAB_RADIUS * TOUCH_GRAB_RADIUS;
+        for (const b of bodiesRef.current) {
+          const dx = b.position.x - pt.x;
+          const dy = b.position.y - pt.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < bestDist) {
+            bestDist = d2;
+            hit = b;
+          }
+        }
+      }
       touchState = {
         startX: t.clientX,
         startY: t.clientY,
@@ -505,7 +521,7 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
         (mouse as unknown as { button: number }).button = -1;
         (mouseConstraint.constraint as unknown as { stiffness: number }).stiffness = NORMAL_STIFFNESS;
       }
-      canvasEl.style.touchAction = "pan-y";
+      canvasEl.style.touchAction = "manipulation";
       touchState = null;
     };
 
@@ -619,12 +635,12 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     <div
       ref={sceneRef}
       className={`relative w-full ${className}`}
-      style={{ height, touchAction: "auto" }}
+      style={{ height, touchAction: "manipulation" }}
     >
       <canvas
         ref={canvasRef}
         className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing"
-        style={{ touchAction: "pan-y" }}
+        style={{ touchAction: "manipulation" }}
       />
     </div>
   );
