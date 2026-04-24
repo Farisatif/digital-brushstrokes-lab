@@ -559,14 +559,28 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     canvas.addEventListener("pointercancel", finishPointer);
     canvas.addEventListener("pointerleave", onPointerLeave);
 
-    // Scroll-driven impulse — the pills feel the page scroll on ALL devices
-    // (mouse wheel, trackpad, touch). Inertia is preserved through a smoothed
-    // velocity estimator so quick flicks impart a real kick while gentle
-    // scrolls produce only a soft sway. Tuned to feel physical, not chaotic.
+    // ============================================================
+    // Scroll-driven physics — the pills behave like real objects
+    // sitting in a moving container. Newton's 1st law: when the page
+    // (their container) accelerates, they lag behind and FEEL the
+    // pseudo-force in the opposite direction. This works on every
+    // input device (wheel, trackpad, touch flick).
+    //
+    // We feed two channels into the engine:
+    //   1) An instantaneous translational impulse on every body whose
+    //      magnitude is proportional to scroll velocity.
+    //   2) A short-lived gravity bias proportional to scroll
+    //      acceleration — fast flicks momentarily change "down".
+    // Both decay smoothly so the field settles after the user stops.
+    // ============================================================
     let lastScrollY = window.scrollY;
     let lastScrollT = performance.now();
-    let smoothedVy = 0; // px/ms, smoothed
+    let smoothedVy = 0; // px/ms, smoothed scroll velocity
+    let prevSmoothedVy = 0; // for acceleration estimate
+    let scrollGravityBias = 0; // current gravity offset from scroll
+    const baseGravityYInitial = engine.gravity.y;
     let scrollRaf = 0;
+
     const onScroll = () => {
       if (scrollRaf) return;
       scrollRaf = requestAnimationFrame(() => {
@@ -577,39 +591,84 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
         lastScrollY = window.scrollY;
         lastScrollT = now;
         if (!visibleRef.current || reducedMotionRef.current) return;
-        // Instantaneous scroll velocity in px/ms, smoothed for stability.
+
+        // Instantaneous scroll velocity in px/ms.
         const inst = dy / dt;
-        smoothedVy = smoothedVy * 0.55 + inst * 0.45;
-        // Map to a per-body force. Scrolling DOWN (positive dy) feels like
-        // the world is moving up under the pills — push them DOWN slightly,
-        // which reads as the pills lagging behind the page momentum.
-        // Scrolling UP lifts them. Coefficient kept small; clamp for safety.
-        const force = Math.max(-0.0035, Math.min(0.0035, smoothedVy * 0.0009));
-        if (Math.abs(force) < 0.00005) return;
+        prevSmoothedVy = smoothedVy;
+        // Faster smoothing — react quickly to flicks but still stable.
+        smoothedVy = smoothedVy * 0.35 + inst * 0.65;
+
+        // Acceleration (jerk) of the scroll — used for gravity bias kick.
+        const accel = (smoothedVy - prevSmoothedVy) / dt; // px/ms²
+
+        // ---- Channel 1: pseudo-force on every body (inertial reaction) ----
+        // Container moves DOWN (page scrolls down → window.scrollY +) →
+        // bodies feel a force UP relative to the container. We render the
+        // pills inside a container that itself does NOT move, so we apply
+        // the inertial reaction directly: opposite of container accel.
+        // Coefficient is now ~6× the previous value so it is clearly felt.
+        const inertiaForce = -smoothedVy * 0.0055;
+        const clampedForce = Math.max(-0.022, Math.min(0.022, inertiaForce));
+
+        // ---- Channel 2: temporary gravity bias from scroll acceleration ----
+        // Quick flicks tilt the gravity vector, then it eases back to base.
+        scrollGravityBias = Math.max(
+          -0.9,
+          Math.min(0.9, scrollGravityBias * 0.55 + accel * -180),
+        );
+        engine.gravity.y = baseGravityYInitial + scrollGravityBias;
+
+        if (Math.abs(clampedForce) < 0.00008) return;
         for (const b of bodiesRef.current) {
-          // Tiny lateral jitter so the field doesn't move as a rigid block.
-          const jitter = (Math.random() - 0.5) * Math.abs(force) * 0.5;
-          Matter.Body.applyForce(b, b.position, { x: jitter, y: force });
+          // Lateral jitter scales with force magnitude — fast scrolls cause
+          // a slightly chaotic shake, slow scrolls a near-perfect drift.
+          const jitter = (Math.random() - 0.5) * Math.abs(clampedForce) * 0.65;
+          // Slight torque so the pills tumble naturally instead of sliding.
+          const torque = (Math.random() - 0.5) * Math.abs(clampedForce) * 4;
+          Matter.Body.applyForce(b, b.position, { x: jitter, y: clampedForce });
+          b.torque += torque;
+          // Safety cap on linear velocity so a hard flick can't fling
+          // pills off-screen at unreadable speed.
           const v = b.velocity;
           const sp = Math.hypot(v.x, v.y);
-          if (sp > 14)
-            Matter.Body.setVelocity(b, { x: (v.x / sp) * 14, y: (v.y / sp) * 14 });
+          if (sp > 22)
+            Matter.Body.setVelocity(b, { x: (v.x / sp) * 22, y: (v.y / sp) * 22 });
+          // Cap angular velocity too — prevent dizzy spins.
+          if (Math.abs(b.angularVelocity) > 0.45)
+            Matter.Body.setAngularVelocity(b, Math.sign(b.angularVelocity) * 0.45);
         }
       });
     };
     window.addEventListener("scroll", onScroll, { passive: true });
 
+    // Continuous decay of the scroll-induced gravity bias so it settles
+    // back to base when the user stops scrolling. Runs at ~60Hz via the
+    // engine tick — guarantees no stuck tilt.
+    const onBeforeUpdate = () => {
+      if (reducedMotionRef.current) return;
+      // Velocity decay for the smoothed estimator (otherwise after a long
+      // pause the next scroll inherits stale momentum).
+      smoothedVy *= 0.92;
+      // Gravity bias eases back home.
+      scrollGravityBias *= 0.9;
+      engine.gravity.y = baseGravityYInitial + scrollGravityBias;
+    };
+    Matter.Events.on(engine, "beforeUpdate", onBeforeUpdate);
+
     // Device motion / orientation tilt — pills react to phone tilt. Subtle
     // gravity bias on coarse pointers (touch devices) so the field feels
-    // physically alive when the user moves the device.
-    let baseGravityY = engine.gravity.y;
+    // physically alive when the user moves the device. Combined with the
+    // scroll-induced bias above so both inputs read together.
     const onOrient = (e: DeviceOrientationEvent) => {
       if (!visibleRef.current || reducedMotionRef.current) return;
       // gamma: left/right tilt (-90..90), beta: front/back (-180..180)
       const gx = (e.gamma ?? 0) / 45; // normalize ~[-2..2]
       const gy = (e.beta ?? 0) / 90; // normalize ~[-2..2]
       engine.gravity.x = Math.max(-1.2, Math.min(1.2, gx)) * 0.6;
-      engine.gravity.y = baseGravityY + Math.max(-0.5, Math.min(0.5, gy - 0.5)) * 0.4;
+      const tiltBias = Math.max(-0.5, Math.min(0.5, gy - 0.5)) * 0.4;
+      // Note: beforeUpdate already writes scrollGravityBias every tick,
+      // so we just add the tilt component on top of the base+scroll value.
+      engine.gravity.y = baseGravityYInitial + scrollGravityBias + tiltBias;
     };
     const isCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
     if (isCoarsePointer && typeof window.DeviceOrientationEvent !== "undefined") {
@@ -632,6 +691,7 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       clearSpawnTimers();
       window.removeEventListener("scroll", onScroll);
       if (isCoarsePointer) window.removeEventListener("deviceorientation", onOrient);
+      Matter.Events.off(engine, "beforeUpdate", onBeforeUpdate);
       canvas.removeEventListener("pointerdown", onPointerDown);
       canvas.removeEventListener("pointermove", onPointerMove);
       canvas.removeEventListener("pointerup", finishPointer);
