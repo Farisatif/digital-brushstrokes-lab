@@ -6,6 +6,7 @@ import { useSiteData } from "./SiteDataProvider";
 import { useLang } from "./LanguageProvider";
 import { getGithubBundle, type GithubBundle } from "@/utils/github.functions";
 import { GlowDots } from "./GlowDots";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const CELL = 12; // px
 const GAP = 4; // px
@@ -389,7 +390,7 @@ function Stat({
         className="mt-1 font-display text-2xl sm:text-3xl tabular-nums transition-colors"
         style={{ color: loading ? undefined : color }}
       >
-        {loading ? <span className="inline-block h-6 w-10 rounded bg-secondary animate-pulse" /> : value}
+        {loading ? <Skeleton className="inline-block h-7 w-12 rounded-md align-middle" /> : value}
       </div>
       <div className="mt-2 flex items-center gap-[3px]" aria-hidden="true">
         {[0, 1, 2, 3, 4].map((l) => (
