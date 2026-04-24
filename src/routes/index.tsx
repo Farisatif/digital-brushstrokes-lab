@@ -47,32 +47,31 @@ function Index() {
       <Hero />
       <Marquee items={tagsEn} itemsAr={tagsAr} key={lang} />
 
-      {/* Curated rhythm — alternating bands for a clear, magazine-style flow.
-          Light/dark tokens auto-invert between themes, so the same layout
-          feels right in both modes. */}
+      {/* Curated rhythm — five-tone band system creates magazine-style
+          progression: light → surface → dark → soft → dark. Each transition
+          is intentional and the contrast walks the eye down the page. */}
       <SectionBand variant="light" pattern="grid-fine" divider>
         <AboutSection />
       </SectionBand>
 
-      <SectionBand variant="dark" pattern="none" divider>
+      <SectionBand variant="surface" pattern="grid-dots" divider>
         <SkillsSection />
       </SectionBand>
 
-      <SectionBand variant="light" pattern="grid-fine" divider>
+      <SectionBand variant="dark" pattern="grid-fine" divider>
         <ExperienceSection />
       </SectionBand>
 
-      <SectionBand variant="light" pattern="grid-fine" divider>
+      <SectionBand variant="soft" pattern="aurora" divider>
         <ProjectsSection />
       </SectionBand>
 
-      {/* Signature inverted band — black in light theme, white in dark theme.
-          No pattern overlay so the surface stays clean and dramatic. */}
+      {/* Signature inverted band — pure black in light, pure white in dark. */}
       <SectionBand variant="dark" pattern="none" divider>
         <AchievementsSection />
       </SectionBand>
 
-      <SectionBand variant="dark" pattern="none" divider>
+      <SectionBand variant="surface" pattern="grid-dots" divider>
         <GithubActivitySection />
       </SectionBand>
 
