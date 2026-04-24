@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Github, Loader2, Plus } from "lucide-react";
+import { Github, Plus } from "lucide-react";
+import { DotPulse } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import type { SiteData } from "@/components/SiteDataProvider";
 import { Field, TextInput } from "../Field";
@@ -67,7 +68,7 @@ export function ProjectsForm({ data, onChange }: { data: SiteData; onChange: (d:
           disabled={importing}
           className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-foreground text-background hover:bg-foreground/90 disabled:opacity-50 transition"
         >
-          {importing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+          {importing ? <DotPulse /> : <Plus className="h-3 w-3" />}
           Import from GitHub
         </button>
       </div>
