@@ -521,7 +521,7 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
         (mouse as unknown as { button: number }).button = -1;
         (mouseConstraint.constraint as unknown as { stiffness: number }).stiffness = NORMAL_STIFFNESS;
       }
-      canvasEl.style.touchAction = "pan-y";
+      canvasEl.style.touchAction = "manipulation";
       touchState = null;
     };
 
@@ -635,12 +635,12 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     <div
       ref={sceneRef}
       className={`relative w-full ${className}`}
-      style={{ height, touchAction: "auto" }}
+      style={{ height, touchAction: "manipulation" }}
     >
       <canvas
         ref={canvasRef}
         className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing"
-        style={{ touchAction: "pan-y" }}
+        style={{ touchAction: "manipulation" }}
       />
     </div>
   );
