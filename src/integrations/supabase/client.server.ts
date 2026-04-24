@@ -7,11 +7,16 @@ import type { Database } from './types';
 
 function createSupabaseAdminClient() {
   const SUPABASE_URL = process.env.SUPABASE_URL;
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // The platform reserves the SUPABASE_ prefix for managed integrations, so
+  // when this project is connected to an external Supabase the service role
+  // key is provided via DB_SERVICE_ROLE_KEY. Fall back to the managed name
+  // for projects using the built-in integration.
+  const SUPABASE_SERVICE_ROLE_KEY =
+    process.env.DB_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error(
-      'Missing Supabase server environment variables. Ensure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set.'
+      'Missing Supabase server environment variables. Ensure SUPABASE_URL and DB_SERVICE_ROLE_KEY (or SUPABASE_SERVICE_ROLE_KEY) are set.'
     );
   }
 
