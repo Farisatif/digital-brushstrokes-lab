@@ -189,6 +189,11 @@
   --band-dark-foreground: oklch(0.105 0.022 268);
   --band-primary: oklch(0.6 0.22 268);
   --band-primary-foreground: oklch(0.09 0.018 268);
+  /* Dark-mode extended bands: deep indigo → elevated surface → primary wash */
+  --band-surface: oklch(0.115 0.022 268);
+  --band-surface-foreground: oklch(0.985 0.004 255);
+  --band-soft: oklch(0.16 0.04 268);
+  --band-soft-foreground: oklch(0.985 0.004 255);
   --gradient-primary: linear-gradient(135deg, var(--primary) 0%, var(--primary-glow) 100%);
   --gradient-mesh: radial-gradient(at 20% 20%, oklch(0.32 0.18 268 / 0.5) 0px, transparent 50%),
                    radial-gradient(at 80% 0%, oklch(0.28 0.16 240 / 0.4) 0px, transparent 50%),
