@@ -900,6 +900,20 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
           </span>
         </div>
       )}
+      {needsMotionPermission && !motionDenied && (
+        <button
+          type="button"
+          onClick={() => requestMotionRef.current?.()}
+          className="absolute right-3 top-3 z-10 rounded-full border border-border/60 bg-background/90 px-3 py-1.5 text-[11px] font-medium text-foreground shadow-sm backdrop-blur transition hover:bg-accent"
+        >
+          <span dir="auto">Enable motion · تفعيل الحركة</span>
+        </button>
+      )}
+      {motionDenied && (
+        <div className="pointer-events-none absolute right-3 top-3 z-10 rounded-full border border-border/60 bg-background/80 px-3 py-1 text-[11px] text-muted-foreground backdrop-blur">
+          <span dir="auto">Motion unavailable · الحساسات غير متاحة</span>
+        </div>
+      )}
     </div>
   );
 });
