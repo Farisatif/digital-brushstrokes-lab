@@ -667,13 +667,142 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     };
     Matter.Events.on(engine, "beforeUpdate", onBeforeUpdate);
 
-    // Device tilt is intentionally NOT wired to gravity anymore.
-    // Holding a phone naturally produces a constant ~5–15° gamma tilt that
-    // would dominate gravity.x and push the pills toward one side, hiding
-    // the scroll-driven physics. Pills should fall straight down to the
-    // floor; only scroll and direct interaction (drag) move them sideways.
+    // ============================================================
+    // Device sensors — DeviceOrientation (tilt) + DeviceMotion (shake)
+    // ------------------------------------------------------------
+    // Implementation rules (per UX spec):
+    //   • Apply per-body force scaled by each pill's __depth (parallax).
+    //   • DO NOT mutate global gravity from tilt — that would override
+    //     the straight-down fall and the scroll-driven gravity bias.
+    //   • Smooth raw sensor values with EMA so motion is fluid, not jittery.
+    //   • Cap forces so pills never escape the canvas.
+    //   • iOS 13+ requires explicit permission via a user gesture.
+    //   • If sensors are unsupported / denied, fall back to mouse parallax
+    //     on the wrap element (works for desktop and any non-sensor device).
+    //   • Sensors only run when `visibleRef.current` to save battery.
+    // ============================================================
     const isCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
-    const onOrient: ((e: DeviceOrientationEvent) => void) | null = null;
+    const isSecure =
+      typeof window !== "undefined" &&
+      (window.isSecureContext || location.hostname === "localhost");
+    const supportsOrientation =
+      typeof window !== "undefined" && "DeviceOrientationEvent" in window;
+    const supportsMotion =
+      typeof window !== "undefined" && "DeviceMotionEvent" in window;
+    type AnyOrientationCtor = { requestPermission?: () => Promise<"granted" | "denied"> };
+    type AnyMotionCtor = { requestPermission?: () => Promise<"granted" | "denied"> };
+    const needsIosPermission =
+      isSecure &&
+      ((supportsOrientation &&
+        typeof (DeviceOrientationEvent as unknown as AnyOrientationCtor).requestPermission ===
+          "function") ||
+        (supportsMotion &&
+          typeof (DeviceMotionEvent as unknown as AnyMotionCtor).requestPermission ===
+            "function"));
+
+    // Smoothed sensor state (module-scoped to this effect).
+    let tiltX = 0; // gamma in deg, smoothed (left/right tilt)
+    let tiltY = 0; // beta - 45° in deg, smoothed (front/back tilt offset)
+    let lastShakeMag = 0;
+    let shakeAt = 0;
+    let pointerParallaxX = 0;
+    let pointerParallaxY = 0;
+
+    const onOrient = (e: DeviceOrientationEvent) => {
+      if (!visibleRef.current || reducedMotionRef.current) return;
+      const gamma = typeof e.gamma === "number" ? e.gamma : 0; // -90..90
+      const beta = typeof e.beta === "number" ? e.beta : 45; // -180..180
+      // Clamp to a comfortable hold range and re-center beta around 45°
+      // (a phone held upright at 45° forward tilt should feel "neutral").
+      const rawX = Math.max(-35, Math.min(35, gamma));
+      const rawY = Math.max(-35, Math.min(35, beta - 45));
+      // Strong EMA — tilt feels physical, not jittery.
+      tiltX = tiltX * 0.82 + rawX * 0.18;
+      tiltY = tiltY * 0.82 + rawY * 0.18;
+    };
+
+    const onMotion = (e: DeviceMotionEvent) => {
+      if (!visibleRef.current || reducedMotionRef.current) return;
+      const a = e.accelerationIncludingGravity ?? e.acceleration;
+      if (!a) return;
+      const mag = Math.hypot(a.x ?? 0, a.y ?? 0, a.z ?? 0);
+      // Detect a "shake": rapid jump in acceleration magnitude.
+      const jolt = Math.abs(mag - lastShakeMag);
+      lastShakeMag = mag;
+      const now = performance.now();
+      // Throttle shake impulses — at most one every 140ms — and require a
+      // meaningful jolt so a steady walk doesn't trigger it.
+      if (jolt > 6 && now - shakeAt > 140) {
+        shakeAt = now;
+        const dirX = (a.x ?? 0) > 0 ? -1 : 1; // opposite of accel direction
+        const dirY = (a.y ?? 0) > 0 ? -1 : 1;
+        // Scale impulse by jolt magnitude, capped so it never throws pills
+        // out of the canvas in one frame.
+        const impulse = Math.min(0.022, jolt * 0.0014);
+        for (const b of bodiesRef.current) {
+          const k = b.__depth;
+          Matter.Body.applyForce(b, b.position, {
+            x: dirX * impulse * k * (0.6 + Math.random() * 0.8),
+            y: dirY * impulse * k * (0.4 + Math.random() * 0.6),
+          });
+          b.torque += (Math.random() - 0.5) * impulse * 12 * k;
+        }
+      }
+    };
+
+    // Mouse-parallax fallback for devices without (or that deny) sensors.
+    const onWrapMouseMove = (e: MouseEvent) => {
+      if (reducedMotionRef.current) return;
+      const rect = wrap.getBoundingClientRect();
+      // Range -1..1 around centre.
+      const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const ny = ((e.clientY - rect.top) / rect.height) * 2 - 1;
+      pointerParallaxX = pointerParallaxX * 0.78 + nx * 22 * 0.22;
+      pointerParallaxY = pointerParallaxY * 0.78 + ny * 22 * 0.22;
+    };
+
+    // Continuously inject the smoothed sensor / pointer values as gentle,
+    // depth-scaled forces. Runs at engine tick — independent of scroll.
+    const onSensorTick = () => {
+      if (!visibleRef.current || reducedMotionRef.current) return;
+      const list = bodiesRef.current;
+      if (list.length === 0) return;
+      // Combine tilt and pointer-parallax into a single effective vector.
+      // Each is already smoothed and clamped.
+      const fxBase = (tiltX * 0.000038 + pointerParallaxX * 0.0000048);
+      const fyBase = (tiltY * 0.000022 + pointerParallaxY * 0.0000028);
+      if (Math.abs(fxBase) < 1e-7 && Math.abs(fyBase) < 1e-7) return;
+      for (const b of list) {
+        const k = b.__depth;
+        Matter.Body.applyForce(b, b.position, { x: fxBase * k, y: fyBase * k });
+      }
+    };
+    Matter.Events.on(engine, "beforeUpdate", onSensorTick);
+
+    // Always wire up the mouse fallback — it costs nothing and helps when
+    // sensors are absent or never granted (e.g. desktop visitors).
+    wrap.addEventListener("mousemove", onWrapMouseMove);
+
+    const attachSensors = () => {
+      if (!isSecure) return;
+      if (supportsOrientation) window.addEventListener("deviceorientation", onOrient);
+      if (supportsMotion) window.addEventListener("devicemotion", onMotion);
+      sensorAttachRef.current = () => {
+        if (supportsOrientation) window.removeEventListener("deviceorientation", onOrient);
+        if (supportsMotion) window.removeEventListener("devicemotion", onMotion);
+        sensorAttachRef.current = null;
+      };
+    };
+
+    if (needsIosPermission) {
+      // Wait for the user gesture — rendered as a button in the JSX below.
+      setNeedsMotionPermission(true);
+    } else if ((supportsOrientation || supportsMotion) && isCoarsePointer && isSecure) {
+      // Auto-attach on Android / non-iOS phones where no permission is needed.
+      attachSensors();
+    }
+    // Expose attachment for the permission button click.
+    sensorAttachRef.current = sensorAttachRef.current ?? attachSensors;
 
     try {
       if (!sessionStorage.getItem("pp:hint:v1")) {
