@@ -50,32 +50,32 @@ function Index() {
       {/* Curated rhythm — five-tone band system creates magazine-style
           progression: light → surface → dark → soft → dark. Each transition
           is intentional and the contrast walks the eye down the page. */}
-      <SectionBand variant="light" pattern="grid-fine" divider>
+      <SectionBand variant="light" pattern="grid-fine" divider roundBottom>
         <AboutSection />
       </SectionBand>
 
-      <SectionBand variant="surface" pattern="grid-dots" divider>
+      <SectionBand variant="surface" pattern="grid-dots" divider roundTop roundBottom>
         <SkillsSection />
       </SectionBand>
 
-      <SectionBand variant="dark" pattern="grid-fine" divider>
+      <SectionBand variant="dark" pattern="grid-fine" divider roundTop roundBottom>
         <ExperienceSection />
       </SectionBand>
 
-      <SectionBand variant="soft" pattern="aurora" divider>
+      <SectionBand variant="soft" pattern="aurora" divider roundTop roundBottom>
         <ProjectsSection />
       </SectionBand>
 
       {/* Signature inverted band — pure black in light, pure white in dark. */}
-      <SectionBand variant="dark" pattern="none" divider>
+      <SectionBand variant="dark" pattern="none" divider roundTop roundBottom>
         <AchievementsSection />
       </SectionBand>
 
-      <SectionBand variant="surface" pattern="grid-dots" divider>
+      <SectionBand variant="surface" pattern="grid-dots" divider roundTop roundBottom>
         <GithubActivitySection />
       </SectionBand>
 
-      <SectionBand variant="dark" pattern="grid-fine" divider>
+      <SectionBand variant="dark" pattern="grid-fine" divider roundTop>
         <ContactSection />
       </SectionBand>
     </div>
