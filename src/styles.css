@@ -325,6 +325,21 @@
       linear-gradient(to bottom, color-mix(in oklab, currentColor 4%, transparent) 1px, transparent 1px);
     background-size: 32px 32px;
   }
+  /* Premium dotted grid for elevated bands */
+  .grid-bg-dots {
+    background-image: radial-gradient(
+      color-mix(in oklab, currentColor 14%, transparent) 1px,
+      transparent 1px
+    );
+    background-size: 24px 24px;
+    mask-image: radial-gradient(ellipse at center, black 50%, transparent 85%);
+  }
+  /* Soft aurora wash — used behind feature sections */
+  .aurora-bg {
+    background:
+      radial-gradient(ellipse 80% 50% at 20% 0%, color-mix(in oklab, var(--primary) 18%, transparent), transparent 60%),
+      radial-gradient(ellipse 70% 60% at 90% 100%, color-mix(in oklab, var(--primary-glow) 14%, transparent), transparent 60%);
+  }
   /* Noise overlay for refined depth */
   .noise-overlay {
     position: relative;
