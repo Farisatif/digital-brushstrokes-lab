@@ -92,6 +92,7 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
   const tagAutoHideRef = useRef<number | null>(null);
   const holdTimerRef = useRef<number | null>(null);
   const spawnAllRef = useRef<() => void>(() => {});
+  const hasSpawnedRef = useRef(false);
 
   const [showHint, setShowHint] = useState(false);
 
@@ -268,7 +269,9 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       buildWalls(w, h);
     };
     setSize();
-    spawnAll();
+    // Defer spawn until the section actually scrolls into view (handled by
+    // the IntersectionObserver below). This ensures pills "fall" right when
+    // the user reaches the heading — no wasted entrance off-screen.
 
     const onMql = (e: MediaQueryListEvent) => {
       reducedMotionRef.current = e.matches;
@@ -285,9 +288,15 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
 
     const io = new IntersectionObserver(
       (entries) => {
-        for (const e of entries) visibleRef.current = e.isIntersecting;
+        for (const e of entries) {
+          visibleRef.current = e.isIntersecting;
+          if (e.isIntersecting && !hasSpawnedRef.current) {
+            hasSpawnedRef.current = true;
+            spawnAll();
+          }
+        }
       },
-      { threshold: 0.05 },
+      { threshold: 0.18 },
     );
     io.observe(wrap);
 
@@ -550,30 +559,41 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     canvas.addEventListener("pointercancel", finishPointer);
     canvas.addEventListener("pointerleave", onPointerLeave);
 
+    // Scroll-driven impulse — the pills feel the page scroll on ALL devices
+    // (mouse wheel, trackpad, touch). Inertia is preserved through a smoothed
+    // velocity estimator so quick flicks impart a real kick while gentle
+    // scrolls produce only a soft sway. Tuned to feel physical, not chaotic.
     let lastScrollY = window.scrollY;
+    let lastScrollT = performance.now();
+    let smoothedVy = 0; // px/ms, smoothed
     let scrollRaf = 0;
     const onScroll = () => {
       if (scrollRaf) return;
       scrollRaf = requestAnimationFrame(() => {
         scrollRaf = 0;
-        if (!visibleRef.current) {
-          lastScrollY = window.scrollY;
-          return;
-        }
+        const now = performance.now();
         const dy = window.scrollY - lastScrollY;
+        const dt = Math.max(1, now - lastScrollT);
         lastScrollY = window.scrollY;
-        const isCoarse = window.matchMedia("(pointer: coarse)").matches;
-        if (isCoarse) return;
-        const k = Math.max(-12, Math.min(12, dy)) * 0.0006;
+        lastScrollT = now;
+        if (!visibleRef.current || reducedMotionRef.current) return;
+        // Instantaneous scroll velocity in px/ms, smoothed for stability.
+        const inst = dy / dt;
+        smoothedVy = smoothedVy * 0.55 + inst * 0.45;
+        // Map to a per-body force. Scrolling DOWN (positive dy) feels like
+        // the world is moving up under the pills — push them DOWN slightly,
+        // which reads as the pills lagging behind the page momentum.
+        // Scrolling UP lifts them. Coefficient kept small; clamp for safety.
+        const force = Math.max(-0.0035, Math.min(0.0035, smoothedVy * 0.0009));
+        if (Math.abs(force) < 0.00005) return;
         for (const b of bodiesRef.current) {
-          Matter.Body.applyForce(b, b.position, {
-            x: (Math.random() - 0.5) * 0.0006,
-            y: -k,
-          });
+          // Tiny lateral jitter so the field doesn't move as a rigid block.
+          const jitter = (Math.random() - 0.5) * Math.abs(force) * 0.5;
+          Matter.Body.applyForce(b, b.position, { x: jitter, y: force });
           const v = b.velocity;
           const sp = Math.hypot(v.x, v.y);
-          if (sp > 12)
-            Matter.Body.setVelocity(b, { x: (v.x / sp) * 12, y: (v.y / sp) * 12 });
+          if (sp > 14)
+            Matter.Body.setVelocity(b, { x: (v.x / sp) * 14, y: (v.y / sp) * 14 });
         }
       });
     };
