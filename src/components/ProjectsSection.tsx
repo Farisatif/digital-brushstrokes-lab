@@ -17,7 +17,7 @@ export function ProjectsSection() {
             </p>
             <h2 className="font-display text-5xl sm:text-7xl tracking-[-0.04em] leading-[0.95] max-w-4xl">
               {t("Projects ", "مشاريع ")}
-              <span className="italic text-[oklch(0.42_0.2_255)]">
+              <span className="italic gradient-text-primary">
                 {t("in the wild.", "على أرض الواقع.")}
               </span>
             </h2>
