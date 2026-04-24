@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Send, Loader2, MessageSquareText } from "lucide-react";
+import { Send, MessageSquareText } from "lucide-react";
 import { toast } from "sonner";
 import { Reveal } from "./Reveal";
 import { useLang } from "./LanguageProvider";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton, DotPulse } from "@/components/ui/skeleton";
 
 type Comment = {
   id: string;
