@@ -4,6 +4,7 @@ import { Send, Loader2, MessageSquareText } from "lucide-react";
 import { toast } from "sonner";
 import { Reveal } from "./Reveal";
 import { useLang } from "./LanguageProvider";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Comment = {
   id: string;
@@ -272,7 +273,30 @@ export function Comments() {
 
       <div ref={listRef} className="lg:col-span-7 space-y-4">
         {loading ? (
-          <div className="text-sm text-muted-foreground py-12 text-center">{t("Loading conversations…", "جارٍ تحميل المحادثات…")}</div>
+          <div className="space-y-4" aria-label={t("Loading conversations", "جارٍ تحميل المحادثات")}>
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="rounded-3xl bg-card border border-border p-6 sm:p-7"
+                style={{ opacity: 1 - i * 0.18 }}
+              >
+                <div className="flex items-start gap-4">
+                  <Skeleton className="h-11 w-11 rounded-2xl shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <Skeleton className="h-3.5 w-28 rounded-full" />
+                      <Skeleton className="h-3 w-20 rounded-full" />
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      <Skeleton className="h-3 w-[92%] rounded-full" />
+                      <Skeleton className="h-3 w-[78%] rounded-full" />
+                      <Skeleton className="h-3 w-[55%] rounded-full" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : items.length === 0 ? (
           <div className="text-sm text-muted-foreground py-12 text-center rounded-3xl border border-dashed border-border">
             {t("No comments yet — be the first.", "لا توجد تعليقات بعد — كن الأول.")}
@@ -282,7 +306,7 @@ export function Comments() {
             <div
               key={c.id}
               data-cid={c.id}
-              className="comment-card-enter group rounded-3xl bg-card border border-border p-6 sm:p-7 transition-all hover:-translate-y-0.5 hover:soft-shadow hover:border-foreground/20"
+              className="skeleton-content-in comment-card-enter group rounded-3xl bg-card border border-border p-6 sm:p-7 transition-all hover:-translate-y-0.5 hover:soft-shadow hover:border-foreground/20"
             >
               <div className="flex items-start gap-4">
                 <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-[oklch(0.55_0.22_255)] to-[oklch(0.78_0.12_270)] text-white flex items-center justify-center font-display text-lg shrink-0">
