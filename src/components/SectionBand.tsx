@@ -21,6 +21,10 @@ interface Props {
   pattern?: "grid" | "grid-fine" | "grid-dots" | "mesh" | "aurora" | "none";
   /** Show top hairline divider */
   divider?: boolean;
+  /** Round the bottom corners — creates a soft "card stack" rhythm between sections. */
+  roundBottom?: boolean;
+  /** Round the top corners — pairs with the previous section's roundBottom. */
+  roundTop?: boolean;
 }
 
 const variantClasses: Record<BandVariant, string> = {
@@ -47,12 +51,26 @@ export function SectionBand({
   id,
   pattern = "none",
   divider = false,
+  roundBottom = false,
+  roundTop = false,
 }: Props) {
+  const radiusClasses = [
+    roundTop ? "rounded-t-[2.5rem] sm:rounded-t-[3.5rem]" : "",
+    roundBottom ? "rounded-b-[2.5rem] sm:rounded-b-[3.5rem]" : "",
+  ].filter(Boolean).join(" ");
   return (
     <div
       id={id}
       data-band={variant}
-      className={`relative isolate noise-overlay ${variantClasses[variant]} ${className}`}
+      className={`relative isolate noise-overlay overflow-hidden ${variantClasses[variant]} ${radiusClasses} ${className}`}
+      style={
+        roundBottom || roundTop
+          ? {
+              boxShadow:
+                "0 30px 60px -40px color-mix(in oklab, currentColor 25%, transparent)",
+            }
+          : undefined
+      }
     >
       {divider && (
         <div className="absolute top-0 left-0 right-0 section-divider opacity-60" />
