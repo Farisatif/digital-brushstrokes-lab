@@ -657,15 +657,18 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
 
     // Device motion / orientation tilt — pills react to phone tilt. Subtle
     // gravity bias on coarse pointers (touch devices) so the field feels
-    // physically alive when the user moves the device.
-    let baseGravityY = engine.gravity.y;
+    // physically alive when the user moves the device. Combined with the
+    // scroll-induced bias above so both inputs read together.
     const onOrient = (e: DeviceOrientationEvent) => {
       if (!visibleRef.current || reducedMotionRef.current) return;
       // gamma: left/right tilt (-90..90), beta: front/back (-180..180)
       const gx = (e.gamma ?? 0) / 45; // normalize ~[-2..2]
       const gy = (e.beta ?? 0) / 90; // normalize ~[-2..2]
       engine.gravity.x = Math.max(-1.2, Math.min(1.2, gx)) * 0.6;
-      engine.gravity.y = baseGravityY + Math.max(-0.5, Math.min(0.5, gy - 0.5)) * 0.4;
+      const tiltBias = Math.max(-0.5, Math.min(0.5, gy - 0.5)) * 0.4;
+      // Note: beforeUpdate already writes scrollGravityBias every tick,
+      // so we just add the tilt component on top of the base+scroll value.
+      engine.gravity.y = baseGravityYInitial + scrollGravityBias + tiltBias;
     };
     const isCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
     if (isCoarsePointer && typeof window.DeviceOrientationEvent !== "undefined") {
