@@ -174,11 +174,12 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
     ): ExtBody => {
       const body = Matter.Bodies.rectangle(x, y, w, h, {
         chamfer: { radius: h / 2 },
-        restitution: 0.18,
-        friction: 0.22,
-        frictionStatic: 0.6,
-        frictionAir: 0.012,
-        density: 0.0019,
+        restitution: 0.32,
+        friction: 0.12,
+        frictionStatic: 0.35,
+        frictionAir: 0.022,
+        // Lighter pills — feel airy and bounce playfully instead of thudding.
+        density: 0.0008,
         slop: 0.03,
         angle,
       }) as ExtBody;
