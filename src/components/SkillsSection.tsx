@@ -42,14 +42,15 @@ export function SkillsSection() {
       <div className="relative container mx-auto px-6 max-w-7xl">
         <Reveal>
           <div className="text-center mb-4 sm:mb-5 md:mb-6">
-            <div className="flex items-center justify-center gap-3 mb-5">
+            <div className="flex flex-wrap items-center justify-center gap-3 mb-5">
               <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground">
-                / 02 — {t("Toolkit", "الأدوات")}
+                <span dir="ltr" className="inline-block align-middle">/ 02 —</span>{" "}
+                {t("Toolkit", "الأدوات")}
               </p>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/70 backdrop-blur px-2.5 py-1 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                <Sparkles className="h-3 w-3 text-[oklch(0.55_0.2_255)]" />
+                <Sparkles className="h-3 w-3 text-[oklch(0.55_0.2_255)] shrink-0" />
                 <span className="tabular-nums text-foreground font-medium">{data.skills.length}</span>
-                {t("tech", "تقنية")}
+                <span>{t("tech", "تقنية")}</span>
               </span>
             </div>
             <h2 className="font-display text-5xl sm:text-6xl md:text-7xl lg:text-8xl tracking-[-0.045em] max-w-4xl mx-auto leading-[0.92]">
