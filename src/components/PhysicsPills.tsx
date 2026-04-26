@@ -766,8 +766,12 @@ export const PhysicsPills = forwardRef<PhysicsPillsHandle, Props>(function Physi
       if (list.length === 0) return;
       // Combine tilt and pointer-parallax into a single effective vector.
       // Each is already smoothed and clamped.
+      // Y-axis is inverted vs. raw beta: tilting the screen UP (top of the
+      // device toward the user / back of the device raised) pushes pills
+      // upward, fighting gravity for a tactile "lift" feel. Magnitude is
+      // boosted on Y so the effect is visible against the strong gravity.
       const fxBase = (tiltX * 0.000038 + pointerParallaxX * 0.0000048);
-      const fyBase = (tiltY * 0.000022 + pointerParallaxY * 0.0000028);
+      const fyBase = (-tiltY * 0.000060 + pointerParallaxY * 0.0000028);
       if (Math.abs(fxBase) < 1e-7 && Math.abs(fyBase) < 1e-7) return;
       for (const b of list) {
         const k = b.__depth;
