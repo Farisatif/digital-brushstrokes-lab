@@ -298,8 +298,8 @@ export const changeAdminPassword = createServerFn({ method: "POST" })
 
 // Lightweight DB connectivity check for the admin panel. Performs a tiny
 // SELECT against admin_settings via the service role client and reports
-// success/failure plus latency. No auth required — the result reveals nothing
-// sensitive (just that the backend is reachable).
+// success/failure plus latency. Returns a generic error on failure to avoid
+// leaking internal infrastructure details.
 export const pingDatabase = createServerFn({ method: "GET" }).handler(async () => {
   const startedAt = Date.now();
   try {
@@ -310,15 +310,71 @@ export const pingDatabase = createServerFn({ method: "GET" }).handler(async () =
       .maybeSingle();
     const latencyMs = Date.now() - startedAt;
     if (error) {
-      return { ok: false as const, error: error.message, latencyMs };
+      console.error("[pingDatabase] supabase error:", error.message);
+      return { ok: false as const, error: "Database unreachable", latencyMs };
     }
     return { ok: true as const, latencyMs };
   } catch (e) {
     const latencyMs = Date.now() - startedAt;
-    return {
-      ok: false as const,
-      error: e instanceof Error ? e.message : String(e),
-      latencyMs,
-    };
+    console.error("[pingDatabase] exception:", e instanceof Error ? e.message : String(e));
+    return { ok: false as const, error: "Database unreachable", latencyMs };
   }
 });
+
+// Public comment submission. Routes through a server function so we can enforce
+// rate limiting before inserting via the admin client (RLS bypass). The direct
+// anon INSERT policy on public.comments has been removed in the security
+// hardening migration.
+type SubmitAttempt = { count: number; firstAt: number };
+const commentAttempts = new Map<string, SubmitAttempt>();
+const COMMENT_WINDOW_MS = 60 * 1000; // 1 minute
+const COMMENT_MAX_PER_WINDOW = 5;
+
+function checkCommentRate(key: string): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  const a = commentAttempts.get(key);
+  if (!a || now - a.firstAt > COMMENT_WINDOW_MS) {
+    commentAttempts.set(key, { count: 1, firstAt: now });
+    return { allowed: true };
+  }
+  if (a.count >= COMMENT_MAX_PER_WINDOW) {
+    return { allowed: false, retryAfter: Math.ceil((COMMENT_WINDOW_MS - (now - a.firstAt)) / 1000) };
+  }
+  a.count += 1;
+  return { allowed: true };
+}
+
+export const submitComment = createServerFn({ method: "POST" })
+  .inputValidator((input: { authorName: string; message: string }) => {
+    if (!input || typeof input.authorName !== "string" || typeof input.message !== "string") {
+      throw new Error("Invalid input");
+    }
+    const authorName = input.authorName.trim();
+    const message = input.message.trim();
+    if (authorName.length < 1 || authorName.length > 80) throw new Error("Invalid name");
+    if (message.length < 1 || message.length > 1000) throw new Error("Invalid message");
+    return { authorName, message };
+  })
+  .handler(async ({ data }) => {
+    const { getRequest } = await import("@tanstack/react-start/server");
+    const req = getRequest();
+    const key = getClientKey(req.headers);
+    const rate = checkCommentRate(key);
+    if (!rate.allowed) {
+      return {
+        ok: false as const,
+        error: `Too many comments. Try again in ${rate.retryAfter}s.`,
+        retryAfter: rate.retryAfter,
+      };
+    }
+    const { error } = await supabaseAdmin.from("comments").insert({
+      author_name: data.authorName,
+      message: data.message,
+      // status defaults to 'pending' per schema; admins approve via CMS.
+    });
+    if (error) {
+      console.error("[submitComment] insert error:", error.message);
+      return { ok: false as const, error: "Could not save your comment" };
+    }
+    return { ok: true as const };
+  });
