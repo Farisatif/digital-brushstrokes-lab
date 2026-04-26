@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Reveal } from "./Reveal";
 import { useLang } from "./LanguageProvider";
 import { Skeleton, DotPulse } from "@/components/ui/skeleton";
+import { submitComment } from "@/utils/settings.functions";
 
 type Comment = {
   id: string;
@@ -175,13 +176,20 @@ export function Comments() {
     e.preventDefault();
     if (!name.trim() || !message.trim()) return;
     setSubmitting(true);
-    const { error } = await supabase.from("comments").insert({
-      author_name: name.trim().slice(0, 80),
-      message: message.trim().slice(0, 1000),
-    });
+    let res: { ok: boolean; error?: string };
+    try {
+      res = await submitComment({
+        data: {
+          authorName: name.trim().slice(0, 80),
+          message: message.trim().slice(0, 1000),
+        },
+      });
+    } catch (err) {
+      res = { ok: false, error: err instanceof Error ? err.message : "Network error" };
+    }
     setSubmitting(false);
-    if (error) {
-      toast.error(t("Could not post your comment", "تعذر نشر تعليقك"), { description: error.message });
+    if (!res.ok) {
+      toast.error(t("Could not post your comment", "تعذر نشر تعليقك"), { description: res.error });
       return;
     }
     toast.success(
