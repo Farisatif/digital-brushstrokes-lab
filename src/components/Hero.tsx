@@ -110,7 +110,7 @@ export function Hero() {
               <img src={faresImg} alt={p.name} className="h-full w-full object-cover" />
               <div className="absolute inset-0 rounded-full ring-1 ring-inset ring-white/10" />
             </div>
-            <div className="absolute -bottom-2 -right-2 bg-foreground text-background text-xs px-3 py-1.5 rounded-full font-medium tracking-wide soft-shadow">
+            <div className="absolute -bottom-2 -right-2 rtl:right-auto rtl:-left-2 bg-foreground text-background text-xs px-3 py-1.5 rounded-full font-medium tracking-wide soft-shadow">
               {loc.location}
             </div>
           </motion.div>
